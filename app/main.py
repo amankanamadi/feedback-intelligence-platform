@@ -2,6 +2,7 @@ import logging
 
 from fastapi import Depends, FastAPI
 
+from app.api.feedback import router as feedback_router
 from app.core.config import Settings, get_settings
 
 logging.basicConfig(
@@ -11,6 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Customer Feedback Intelligence Platform")
+app.include_router(feedback_router)
 
 
 @app.get("/health")
