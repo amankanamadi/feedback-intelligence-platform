@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import Feedback, Theme
+from app.database.models import Feedback, MainCategory, Priority, Sentiment, SubCategory, Theme
 
 
 def get_or_create_theme(db: Session, name: str) -> Theme:
@@ -21,6 +21,31 @@ def create_feedback(db: Session, raw_text: str, theme_names: list[str] | None = 
         feedback.themes = [get_or_create_theme(db, name) for name in theme_names]
 
     db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+
+def apply_classification(
+    db: Session,
+    feedback: Feedback,
+    *,
+    main_category: MainCategory,
+    sub_category: SubCategory,
+    sentiment: Sentiment,
+    priority: Priority,
+    confidence: int,
+    summary: str,
+    theme_names: list[str],
+) -> Feedback:
+    feedback.main_category = main_category
+    feedback.sub_category = sub_category
+    feedback.sentiment = sentiment
+    feedback.priority = priority
+    feedback.confidence = confidence
+    feedback.summary = summary
+    feedback.themes = [get_or_create_theme(db, name) for name in theme_names]
+
     db.commit()
     db.refresh(feedback)
     return feedback

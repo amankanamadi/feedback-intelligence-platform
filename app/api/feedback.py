@@ -1,9 +1,14 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.ai.classification import classify_feedback
 from app.api.schemas import FeedbackCreate, FeedbackRead
 from app.database import crud
 from app.database.session import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["feedback"])
 
@@ -11,6 +16,24 @@ router = APIRouter(tags=["feedback"])
 @router.post("/feedback", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
 def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> FeedbackRead:
     feedback = crud.create_feedback(db, raw_text=payload.raw_text)
+
+    try:
+        classification = classify_feedback(payload.raw_text)
+    except Exception:
+        logger.exception("AI classification failed for feedback %s; leaving unclassified", feedback.id)
+        return feedback
+
+    feedback = crud.apply_classification(
+        db,
+        feedback,
+        main_category=classification.main_category,
+        sub_category=classification.sub_category,
+        sentiment=classification.sentiment,
+        priority=classification.priority,
+        confidence=classification.confidence,
+        summary=classification.summary,
+        theme_names=classification.themes,
+    )
     return feedback
 
 
