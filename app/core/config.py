@@ -8,9 +8,11 @@ class Settings(BaseSettings):
     debug: bool = False
     api_port: int = 8000
 
-    # Placeholders wired up by later phases.
     database_url: str = ""
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+
+    # Placeholder wired up in Phase 7.
     chroma_persist_dir: str = "./data/chroma"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
