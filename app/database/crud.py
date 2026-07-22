@@ -55,6 +55,20 @@ def get_feedback(db: Session, feedback_id: int) -> Feedback | None:
     return db.get(Feedback, feedback_id)
 
 
-def list_feedback(db: Session, skip: int = 0, limit: int = 100) -> list[Feedback]:
-    stmt = select(Feedback).order_by(Feedback.created_at.desc()).offset(skip).limit(limit)
+def list_feedback(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    main_category: MainCategory | None = None,
+    sentiment: Sentiment | None = None,
+    search: str | None = None,
+) -> list[Feedback]:
+    stmt = select(Feedback).order_by(Feedback.created_at.desc())
+    if main_category is not None:
+        stmt = stmt.where(Feedback.main_category == main_category)
+    if sentiment is not None:
+        stmt = stmt.where(Feedback.sentiment == sentiment)
+    if search:
+        stmt = stmt.where(Feedback.raw_text.ilike(f"%{search}%"))
+    stmt = stmt.offset(skip).limit(limit)
     return list(db.scalars(stmt))

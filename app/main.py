@@ -1,6 +1,9 @@
 import logging
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.analytics import router as analytics_router
 from app.api.feedback import router as feedback_router
@@ -12,12 +15,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
 app = FastAPI(title="AI Customer Feedback Intelligence Platform")
 app.include_router(feedback_router)
 app.include_router(analytics_router)
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 @app.get("/health")
 def health_check(settings: Settings = Depends(get_settings)) -> dict:
     logger.info("Health check requested")
     return {"status": "ok", "app_name": settings.app_name}
+
+
+@app.get("/dashboard")
+def dashboard_page() -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/")
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard")

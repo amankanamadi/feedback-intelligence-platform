@@ -1,0 +1,19 @@
+body {
+  background-color: #f8f9fa;
+}
+
+.card {
+  border-radius: 0.75rem;
+}
+
+.feedback-row {
+  cursor: pointer;
+}
+
+.feedback-row:hover {
+  background-color: rgba(13, 110, 253, 0.06);
+}
+
+canvas {
+  max-height: 260px;
+}

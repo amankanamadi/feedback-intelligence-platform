@@ -1,0 +1,248 @@
+let sentimentChart, categoryChart, confidenceChart, trendChart, themeChart, feedbackModal;
+
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Request failed: ${url} (${res.status})`);
+  }
+  return res.json();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+function upsertChart(existing, canvas, config) {
+  if (existing) {
+    existing.destroy();
+  }
+  return new Chart(canvas, config);
+}
+
+function renderKPIs(analytics) {
+  const cards = [
+    ["Total Feedback", analytics.total_feedback],
+    ["Positive %", `${analytics.positive_pct}%`],
+    ["Neutral %", `${analytics.neutral_pct}%`],
+    ["Negative %", `${analytics.negative_pct}%`],
+    ["Incidents", analytics.incidents],
+    ["Service Requests", analytics.service_requests],
+    ["General Feedback", analytics.general_feedback],
+    ["Avg Confidence", analytics.average_confidence !== null ? `${analytics.average_confidence}%` : "-"],
+  ];
+
+  document.getElementById("kpi-cards").innerHTML = cards
+    .map(
+      ([label, value]) => `
+        <div class="col-6 col-md-3">
+          <div class="card text-center p-3 h-100">
+            <div class="fs-4 fw-bold">${value}</div>
+            <div class="text-muted small">${label}</div>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderSentimentChart(analytics) {
+  const canvas = document.getElementById("sentimentChart");
+  sentimentChart = upsertChart(sentimentChart, canvas, {
+    type: "pie",
+    data: {
+      labels: analytics.sentiment_breakdown.map((s) => s.sentiment),
+      datasets: [{ data: analytics.sentiment_breakdown.map((s) => s.count) }],
+    },
+  });
+}
+
+function renderCategoryChart(analytics) {
+  const canvas = document.getElementById("categoryChart");
+  categoryChart = upsertChart(categoryChart, canvas, {
+    type: "bar",
+    data: {
+      labels: analytics.category_breakdown.map((c) => c.main_category),
+      datasets: [{ label: "Feedback Count", data: analytics.category_breakdown.map((c) => c.count) }],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+function renderConfidenceChart(analytics) {
+  const canvas = document.getElementById("confidenceChart");
+  confidenceChart = upsertChart(confidenceChart, canvas, {
+    type: "bar",
+    data: {
+      labels: analytics.confidence_distribution.map((b) => b.range),
+      datasets: [{ label: "Feedback Count", data: analytics.confidence_distribution.map((b) => b.count) }],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+function renderTrendChart(analytics) {
+  const canvas = document.getElementById("trendChart");
+  trendChart = upsertChart(trendChart, canvas, {
+    type: "line",
+    data: {
+      labels: analytics.weekly_trend.map((w) => w.week_start),
+      datasets: [
+        { label: "Feedback per Week", data: analytics.weekly_trend.map((w) => w.count), tension: 0.3 },
+      ],
+    },
+    options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+  });
+}
+
+function renderThemeChart(themes) {
+  const canvas = document.getElementById("themeChart");
+  themeChart = upsertChart(themeChart, canvas, {
+    type: "bar",
+    data: {
+      labels: themes.map((t) => t.name),
+      datasets: [{ label: "Occurrences", data: themes.map((t) => t.count) }],
+    },
+    options: {
+      indexAxis: "y",
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+}
+
+async function loadAnalytics() {
+  const analytics = await fetchJSON("/analytics");
+  renderKPIs(analytics);
+  renderSentimentChart(analytics);
+  renderCategoryChart(analytics);
+  renderConfidenceChart(analytics);
+  renderTrendChart(analytics);
+}
+
+async function loadThemes() {
+  const themes = await fetchJSON("/themes?limit=10");
+  renderThemeChart(themes);
+}
+
+function buildFeedbackQuery() {
+  const params = new URLSearchParams();
+  const category = document.getElementById("filter-category").value;
+  const sentiment = document.getElementById("filter-sentiment").value;
+  const search = document.getElementById("search-input").value.trim();
+  if (category) params.set("main_category", category);
+  if (sentiment) params.set("sentiment", sentiment);
+  if (search) params.set("search", search);
+  params.set("limit", "50");
+  return params.toString();
+}
+
+function renderFeedbackTable(items) {
+  const tbody = document.getElementById("feedback-table-body");
+
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">No feedback found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items
+    .map(
+      (f) => `
+        <tr data-id="${f.id}" class="feedback-row">
+          <td>${f.id}</td>
+          <td>${escapeHtml(f.raw_text).slice(0, 80)}</td>
+          <td>${f.main_category ?? "-"}</td>
+          <td>${f.sentiment ?? "-"}</td>
+          <td>${f.priority ?? "-"}</td>
+          <td>${f.confidence ?? "-"}</td>
+          <td>${new Date(f.created_at).toLocaleString()}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  tbody.querySelectorAll("tr[data-id]").forEach((row) => {
+    row.addEventListener("click", () => showFeedbackDetail(row.dataset.id));
+  });
+}
+
+async function loadFeedbackTable() {
+  const query = buildFeedbackQuery();
+  const items = await fetchJSON(`/feedback?${query}`);
+  renderFeedbackTable(items);
+}
+
+async function showFeedbackDetail(id) {
+  const f = await fetchJSON(`/feedback/${id}`);
+  document.getElementById("feedback-modal-body").innerHTML = `
+    <p><strong>Text:</strong> ${escapeHtml(f.raw_text)}</p>
+    <p><strong>Category:</strong> ${f.main_category ?? "-"} / ${f.sub_category ?? "-"}</p>
+    <p><strong>Sentiment:</strong> ${f.sentiment ?? "-"}</p>
+    <p><strong>Priority:</strong> ${f.priority ?? "-"}</p>
+    <p><strong>Confidence:</strong> ${f.confidence ?? "-"}</p>
+    <p><strong>Summary:</strong> ${escapeHtml(f.summary)}</p>
+    <p><strong>Themes:</strong> ${f.themes.length ? f.themes.map(escapeHtml).join(", ") : "-"}</p>
+    <p class="text-muted small mb-0">Created: ${new Date(f.created_at).toLocaleString()}</p>
+  `;
+  feedbackModal.show();
+}
+
+async function refreshAll() {
+  await Promise.all([loadAnalytics(), loadThemes(), loadFeedbackTable()]);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  feedbackModal = new bootstrap.Modal(document.getElementById("feedback-modal"));
+
+  document.getElementById("refresh-btn").addEventListener("click", refreshAll);
+  document.getElementById("filter-category").addEventListener("change", loadFeedbackTable);
+  document.getElementById("filter-sentiment").addEventListener("change", loadFeedbackTable);
+  document.getElementById("search-input").addEventListener("input", debounce(loadFeedbackTable, 300));
+
+  document.getElementById("feedback-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const textInput = document.getElementById("feedback-text");
+    const statusEl = document.getElementById("feedback-form-status");
+    const text = textInput.value.trim();
+    if (!text) return;
+
+    const submitBtn = event.target.querySelector("button[type=submit]");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Classifying...";
+    statusEl.textContent = "";
+
+    try {
+      const res = await fetch("/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raw_text: text }),
+      });
+      if (!res.ok) throw new Error(`Submit failed (${res.status})`);
+      textInput.value = "";
+      statusEl.textContent = "Feedback submitted and classified.";
+      await refreshAll();
+    } catch (err) {
+      statusEl.textContent = `Error: ${err.message}`;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit";
+    }
+  });
+
+  refreshAll();
+});

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.ai.classification import classify_feedback
 from app.api.schemas import FeedbackCreate, FeedbackRead
 from app.database import crud
+from app.database.models import MainCategory, Sentiment
 from app.database.session import get_db
 from app.vector_store.embeddings import get_embedding, store_feedback_embedding
 from app.vector_store.retrieval import retrieve_similar_feedback
@@ -70,9 +72,19 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
 def list_feedback(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    main_category: Optional[MainCategory] = Query(None),
+    sentiment: Optional[Sentiment] = Query(None),
+    search: Optional[str] = Query(None, min_length=1, max_length=200),
     db: Session = Depends(get_db),
 ) -> list[FeedbackRead]:
-    return crud.list_feedback(db, skip=skip, limit=limit)
+    return crud.list_feedback(
+        db,
+        skip=skip,
+        limit=limit,
+        main_category=main_category,
+        sentiment=sentiment,
+        search=search,
+    )
 
 
 @router.get("/feedback/{feedback_id}", response_model=FeedbackRead)
