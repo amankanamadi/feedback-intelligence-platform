@@ -13,3 +13,10 @@ class FeedbackClassification(BaseModel):
     priority: Priority
     confidence: int = Field(ge=0, le=100)
     summary: str
+
+
+class WeeklyNarrative(BaseModel):
+    executive_summary: str
+    key_wins: list[str]
+    key_concerns: list[str]
+    recommended_actions: list[str]
