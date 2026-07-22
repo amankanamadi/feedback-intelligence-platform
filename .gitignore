@@ -5,3 +5,5 @@ __pycache__/
 data/chroma/
 .DS_Store
 *.egg-info/
+.pytest_cache/
+scripts/eval_results.json
