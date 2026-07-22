@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from app.ai.prompt_builder import build_messages
+import logging
+
+from app.ai.prompt_builder import build_messages, format_retrieved_context
 from app.ai.schemas import FeedbackClassification
 from app.ai.structured_output import get_structured_completion
 from app.database.models import MainCategory, Priority, Sentiment, SubCategory
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an AI system that classifies customer feedback for a SaaS product.
 
@@ -81,6 +85,13 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
 ]
 
 
-def classify_feedback(raw_text: str) -> FeedbackClassification:
-    messages = build_messages(SYSTEM_PROMPT, raw_text, FEW_SHOT_EXAMPLES)
+def classify_feedback(
+    raw_text: str, similar_examples: list[dict] | None = None
+) -> FeedbackClassification:
+    context_block = format_retrieved_context(similar_examples or [])
+    if context_block:
+        logger.info("Retrieved RAG context for classification:\n%s", context_block)
+
+    user_content = f"{context_block}\n\n{raw_text}" if context_block else raw_text
+    messages = build_messages(SYSTEM_PROMPT, user_content, FEW_SHOT_EXAMPLES)
     return get_structured_completion(messages, FeedbackClassification)

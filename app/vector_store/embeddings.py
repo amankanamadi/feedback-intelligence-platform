@@ -13,9 +13,12 @@ def get_embedding(text: str) -> list[float]:
 
 
 def store_feedback_embedding(
-    feedback_id: int, text: str, metadata: dict[str, str] | None = None
+    feedback_id: int,
+    text: str,
+    metadata: dict[str, str] | None = None,
+    embedding: list[float] | None = None,
 ) -> None:
-    embedding = get_embedding(text)
+    embedding = embedding if embedding is not None else get_embedding(text)
     collection = get_feedback_collection()
     collection.upsert(
         ids=[str(feedback_id)],

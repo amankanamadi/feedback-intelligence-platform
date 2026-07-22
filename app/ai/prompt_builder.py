@@ -20,3 +20,23 @@ def build_messages(
 
     messages.append({"role": "user", "content": user_content})
     return messages
+
+
+def format_retrieved_context(hits: list[dict]) -> str:
+    """Render RAG retrieval hits (from `retrieve_similar_feedback`) as a
+    plain-text block for injection into the user message, most similar first.
+    """
+    if not hits:
+        return ""
+
+    lines = ["Similar past feedback, for reference (most similar first):"]
+    for i, hit in enumerate(hits, start=1):
+        meta = hit["metadata"]
+        tags = " / ".join(
+            str(meta[key])
+            for key in ("main_category", "sub_category", "sentiment", "priority")
+            if meta.get(key)
+        )
+        tag_suffix = f" -> {tags}" if tags else ""
+        lines.append(f'{i}. "{hit["text"]}"{tag_suffix}')
+    return "\n".join(lines)

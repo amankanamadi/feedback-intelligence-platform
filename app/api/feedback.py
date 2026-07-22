@@ -7,7 +7,8 @@ from app.ai.classification import classify_feedback
 from app.api.schemas import FeedbackCreate, FeedbackRead
 from app.database import crud
 from app.database.session import get_db
-from app.vector_store.embeddings import store_feedback_embedding
+from app.vector_store.embeddings import get_embedding, store_feedback_embedding
+from app.vector_store.retrieval import retrieve_similar_feedback
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,19 @@ router = APIRouter(tags=["feedback"])
 def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> FeedbackRead:
     feedback = crud.create_feedback(db, raw_text=payload.raw_text)
 
+    embedding = None
+    similar_examples: list[dict] = []
     try:
-        classification = classify_feedback(payload.raw_text)
+        embedding = get_embedding(payload.raw_text)
+        similar_examples = retrieve_similar_feedback(embedding, n_results=3)
+    except Exception:
+        logger.exception(
+            "Embedding/retrieval failed for feedback %s; classifying without RAG context",
+            feedback.id,
+        )
+
+    try:
+        classification = classify_feedback(payload.raw_text, similar_examples=similar_examples)
     except Exception:
         logger.exception("AI classification failed for feedback %s; leaving unclassified", feedback.id)
     else:
@@ -35,11 +47,21 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
             theme_names=classification.themes,
         )
 
-    try:
-        metadata = {"main_category": feedback.main_category.value} if feedback.main_category else {}
-        store_feedback_embedding(feedback.id, payload.raw_text, metadata=metadata)
-    except Exception:
-        logger.exception("Embedding storage failed for feedback %s", feedback.id)
+    if embedding is not None:
+        try:
+            metadata = {
+                key: value.value
+                for key, value in (
+                    ("main_category", feedback.main_category),
+                    ("sub_category", feedback.sub_category),
+                    ("sentiment", feedback.sentiment),
+                    ("priority", feedback.priority),
+                )
+                if value is not None
+            }
+            store_feedback_embedding(feedback.id, payload.raw_text, metadata=metadata, embedding=embedding)
+        except Exception:
+            logger.exception("Embedding storage failed for feedback %s", feedback.id)
 
     return feedback
 
