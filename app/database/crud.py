@@ -51,6 +51,13 @@ def apply_classification(
     return feedback
 
 
+def set_embedding(db: Session, feedback: Feedback, embedding: list[float]) -> Feedback:
+    feedback.embedding = embedding
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+
 def get_feedback(db: Session, feedback_id: int) -> Feedback | None:
     return db.get(Feedback, feedback_id)
 

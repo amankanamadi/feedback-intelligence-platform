@@ -1,23 +1,34 @@
 from __future__ import annotations
 
-from app.vector_store.chroma_client import get_feedback_collection
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.database.models import Feedback
 
 
-def retrieve_similar_feedback(embedding: list[float], n_results: int = 3) -> list[dict]:
-    collection = get_feedback_collection()
-    count = collection.count()
-    if count == 0:
-        return []
+def retrieve_similar_feedback(
+    db: Session,
+    embedding: list[float],
+    n_results: int = 3,
+    exclude_id: int | None = None,
+) -> list[dict]:
+    distance = Feedback.embedding.cosine_distance(embedding).label("distance")
+    stmt = select(Feedback, distance).where(Feedback.embedding.isnot(None))
+    if exclude_id is not None:
+        stmt = stmt.where(Feedback.id != exclude_id)
+    stmt = stmt.order_by(distance).limit(n_results)
 
-    results = collection.query(
-        query_embeddings=[embedding],
-        n_results=min(n_results, count),
-        include=["documents", "metadatas", "distances"],
-    )
-
-    return [
-        {"text": doc, "metadata": metadata, "distance": distance}
-        for doc, metadata, distance in zip(
-            results["documents"][0], results["metadatas"][0], results["distances"][0]
-        )
-    ]
+    hits = []
+    for feedback, dist in db.execute(stmt).all():
+        metadata = {
+            key: value.value
+            for key, value in (
+                ("main_category", feedback.main_category),
+                ("sub_category", feedback.sub_category),
+                ("sentiment", feedback.sentiment),
+                ("priority", feedback.priority),
+            )
+            if value is not None
+        }
+        hits.append({"text": feedback.raw_text, "metadata": metadata, "distance": float(dist)})
+    return hits

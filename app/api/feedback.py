@@ -9,7 +9,7 @@ from app.api.schemas import FeedbackCreate, FeedbackRead
 from app.database import crud
 from app.database.models import MainCategory, Sentiment
 from app.database.session import get_db
-from app.vector_store.embeddings import get_embedding, store_feedback_embedding
+from app.vector_store.embeddings import get_embedding
 from app.vector_store.retrieval import retrieve_similar_feedback
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
     similar_examples: list[dict] = []
     try:
         embedding = get_embedding(payload.raw_text)
-        similar_examples = retrieve_similar_feedback(embedding, n_results=3)
+        similar_examples = retrieve_similar_feedback(db, embedding, n_results=3, exclude_id=feedback.id)
     except Exception:
         logger.exception(
             "Embedding/retrieval failed for feedback %s; classifying without RAG context",
@@ -51,17 +51,7 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
 
     if embedding is not None:
         try:
-            metadata = {
-                key: value.value
-                for key, value in (
-                    ("main_category", feedback.main_category),
-                    ("sub_category", feedback.sub_category),
-                    ("sentiment", feedback.sentiment),
-                    ("priority", feedback.priority),
-                )
-                if value is not None
-            }
-            store_feedback_embedding(feedback.id, payload.raw_text, metadata=metadata, embedding=embedding)
+            crud.set_embedding(db, feedback, embedding)
         except Exception:
             logger.exception("Embedding storage failed for feedback %s", feedback.id)
 

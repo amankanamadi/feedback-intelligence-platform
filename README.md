@@ -1,10 +1,15 @@
 # AI Customer Feedback Intelligence Platform
 
 AI-powered customer feedback intelligence system (FastAPI, OpenAI, RAG,
-PostgreSQL, ChromaDB). See `AI_Customer_Feedback_Intelligence_Architecture.md`
+PostgreSQL + pgvector). See `AI_Customer_Feedback_Intelligence_Architecture.md`
 in the repo root for the full architecture.
 
 ## Option A: Local development (venv + local Postgres)
+
+Requires the `vector` extension available to your local Postgres (built in
+via the `pgvector/pgvector` Docker image for Option B; for a native install
+like Postgres.app, build it from source once against your Postgres's
+`pg_config` — see https://github.com/pgvector/pgvector#installation).
 
 ```bash
 cd feedback-intelligence-platform
@@ -33,11 +38,10 @@ cp .env.example .env   # then fill in OPENAI_API_KEY at minimum
 docker compose up --build
 ```
 
-Open http://127.0.0.1:8000/dashboard once it's up. ChromaDB runs embedded in
-the app container; its data persists in the `chroma_data` Docker volume, and
-Postgres data persists in `postgres_data`. To stop and remove containers
-(keeping volumes/data): `docker compose down`. To also wipe all data:
-`docker compose down -v`.
+Open http://127.0.0.1:8000/dashboard once it's up. Vector search runs inside
+Postgres itself (pgvector), so there's only one datastore to persist —
+`postgres_data`. To stop and remove containers (keeping volumes/data):
+`docker compose down`. To also wipe all data: `docker compose down -v`.
 
 `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `UVICORN_WORKERS` in
 `.env` only affect the Compose stack (they configure the containerized

@@ -2,10 +2,13 @@ import enum
 from datetime import datetime
 from typing import Optional
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Enum, ForeignKey, Table, Column, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+EMBEDDING_DIMENSIONS = 1536  # text-embedding-3-small
 
 
 class MainCategory(str, enum.Enum):
@@ -78,6 +81,7 @@ class Feedback(Base):
     priority: Mapped[Optional[Priority]] = mapped_column(Enum(Priority, name="priority_enum"))
     confidence: Mapped[Optional[int]]
     summary: Mapped[Optional[str]]
+    embedding: Mapped[Optional[list[float]]] = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.ai.schemas import FeedbackClassification
@@ -26,6 +26,8 @@ TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=Fals
 
 @pytest.fixture(scope="session", autouse=True)
 def _test_schema():
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
     yield
     Base.metadata.drop_all(engine)
@@ -68,20 +70,21 @@ DEFAULT_CLASSIFICATION = FeedbackClassification(
 @pytest.fixture
 def mock_ai(monkeypatch):
     """Patch the AI/embedding calls used by the feedback API route so
-    tests never hit OpenAI or ChromaDB. Individual tests can override
-    return_value/side_effect on the returned mocks for specific scenarios.
+    tests never hit OpenAI or Postgres for vector work. Individual tests
+    can override return_value/side_effect on the returned mocks for
+    specific scenarios.
     """
     import app.api.feedback as feedback_module
 
     classify_mock = MagicMock(return_value=DEFAULT_CLASSIFICATION)
-    embedding_mock = MagicMock(return_value=[0.0] * 8)
+    embedding_mock = MagicMock(return_value=[0.0] * 1536)
     retrieve_mock = MagicMock(return_value=[])
     store_mock = MagicMock(return_value=None)
 
     monkeypatch.setattr(feedback_module, "classify_feedback", classify_mock)
     monkeypatch.setattr(feedback_module, "get_embedding", embedding_mock)
     monkeypatch.setattr(feedback_module, "retrieve_similar_feedback", retrieve_mock)
-    monkeypatch.setattr(feedback_module, "store_feedback_embedding", store_mock)
+    monkeypatch.setattr(feedback_module.crud, "set_embedding", store_mock)
 
     return {
         "classify": classify_mock,

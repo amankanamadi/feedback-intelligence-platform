@@ -7,6 +7,6 @@ sqlalchemy==2.0.36
 alembic==1.14.0
 psycopg2-binary==2.9.10
 openai==1.59.6
-chromadb==1.5.9
+pgvector==0.4.2
 pytest==8.3.4
 httpx==0.28.1
