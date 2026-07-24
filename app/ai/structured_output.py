@@ -27,11 +27,20 @@ def get_structured_completion(
     client = get_openai_client()
     settings = get_settings()
 
-    completion = client.beta.chat.completions.parse(
-        model=model or settings.openai_model,
-        messages=messages,
-        response_format=response_model,
-    )
+    try:
+        completion = client.beta.chat.completions.parse(
+            model=model or settings.openai_model,
+            messages=messages,
+            response_format=response_model,
+        )
+    except Exception as exc:
+        # Covers cases beyond a clean refusal/parsed=None: a response that
+        # violates a Pydantic constraint the API's JSON schema doesn't
+        # enforce (e.g. confidence out of range), truncated output, or any
+        # other SDK-level failure. Standardizing on one error type here
+        # means every caller's existing `except Exception` handling
+        # continues to work unchanged.
+        raise StructuredCompletionError(f"OpenAI structured completion failed: {exc}") from exc
 
     choice = completion.choices[0]
     if choice.message.refusal:

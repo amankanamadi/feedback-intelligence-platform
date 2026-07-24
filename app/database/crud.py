@@ -19,6 +19,29 @@ def get_or_create_theme(db: Session, name: str) -> Theme:
     return theme
 
 
+def _dedupe_preserve_order(names: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped = []
+    for name in names:
+        if name not in seen:
+            seen.add(name)
+            deduped.append(name)
+    return deduped
+
+
+def _resolve_themes(db: Session, theme_names: list[str]) -> list[Theme]:
+    """Resolve theme names to Theme rows, deduplicating first.
+
+    Duplicate names (e.g. an LLM returning ["X", "X"]) would otherwise
+    resolve to the same Theme object twice in the collection, and
+    SQLAlchemy would try to insert the same (feedback_id, theme_id) pair
+    twice into feedback_themes' composite primary key, raising an
+    IntegrityError. Deduplicating here protects the invariant regardless
+    of which caller supplies the names.
+    """
+    return [get_or_create_theme(db, name) for name in _dedupe_preserve_order(theme_names)]
+
+
 def create_feedback(db: Session, raw_text: str, theme_names: list[str] | None = None) -> Feedback:
     existing_id = db.scalar(select(Feedback.id).where(Feedback.raw_text == raw_text).limit(1))
     if existing_id is not None:
@@ -29,7 +52,7 @@ def create_feedback(db: Session, raw_text: str, theme_names: list[str] | None = 
 
     feedback = Feedback(raw_text=raw_text)
     if theme_names:
-        feedback.themes = [get_or_create_theme(db, name) for name in theme_names]
+        feedback.themes = _resolve_themes(db, theme_names)
 
     db.add(feedback)
     db.commit()
@@ -55,7 +78,7 @@ def apply_classification(
     feedback.priority = priority
     feedback.confidence = confidence
     feedback.summary = summary
-    feedback.themes = [get_or_create_theme(db, name) for name in theme_names]
+    feedback.themes = _resolve_themes(db, theme_names)
 
     db.commit()
     db.refresh(feedback)

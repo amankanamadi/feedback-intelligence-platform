@@ -49,6 +49,25 @@ def test_submit_feedback_degrades_gracefully_on_classification_failure(client, m
     assert body["themes"] == []
 
 
+def test_submit_feedback_handles_duplicate_themes_from_ai(client, mock_ai):
+    mock_ai["classify"].return_value = FeedbackClassification(
+        main_category=MainCategory.INCIDENT,
+        sub_category=SubCategory.PERFORMANCE_ISSUE,
+        sentiment=Sentiment.NEGATIVE,
+        themes=["Slow Dashboard", "Slow Dashboard", "Performance"],
+        priority=Priority.MEDIUM,
+        confidence=90,
+        summary="Customer reports slow dashboard performance.",
+    )
+
+    response = client.post("/feedback", json={"raw_text": "The dashboard is really slow."})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["main_category"] == "Incident"  # classification was saved, not dropped
+    assert sorted(body["themes"]) == ["Performance", "Slow Dashboard"]
+
+
 def test_submit_feedback_degrades_gracefully_on_embedding_failure(client, mock_ai):
     mock_ai["get_embedding"].side_effect = RuntimeError("network error")
 

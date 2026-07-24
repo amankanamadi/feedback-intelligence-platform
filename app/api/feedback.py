@@ -37,17 +37,21 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
     except Exception:
         logger.exception("AI classification failed for feedback %s; leaving unclassified", feedback.id)
     else:
-        feedback = crud.apply_classification(
-            db,
-            feedback,
-            main_category=classification.main_category,
-            sub_category=classification.sub_category,
-            sentiment=classification.sentiment,
-            priority=classification.priority,
-            confidence=classification.confidence,
-            summary=classification.summary,
-            theme_names=classification.themes,
-        )
+        try:
+            feedback = crud.apply_classification(
+                db,
+                feedback,
+                main_category=classification.main_category,
+                sub_category=classification.sub_category,
+                sentiment=classification.sentiment,
+                priority=classification.priority,
+                confidence=classification.confidence,
+                summary=classification.summary,
+                theme_names=classification.themes,
+            )
+        except Exception:
+            db.rollback()
+            logger.exception("Saving classification failed for feedback %s; leaving unclassified", feedback.id)
 
     if embedding is not None:
         try:

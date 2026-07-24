@@ -30,6 +30,34 @@ def test_create_feedback_logs_warning_on_duplicate_text(db_session, caplog):
     assert "duplicate" in caplog.text.lower()
 
 
+def test_create_feedback_dedupes_duplicate_theme_names(db_session):
+    feedback = crud.create_feedback(
+        db_session,
+        raw_text="Slow dashboard, really slow.",
+        theme_names=["Slow Dashboard", "Slow Dashboard", "Performance"],
+    )
+
+    assert sorted(t.name for t in feedback.themes) == ["Performance", "Slow Dashboard"]
+
+
+def test_apply_classification_dedupes_duplicate_theme_names(db_session):
+    feedback = crud.create_feedback(db_session, raw_text="Cannot log in at all.")
+
+    updated = crud.apply_classification(
+        db_session,
+        feedback,
+        main_category=MainCategory.INCIDENT,
+        sub_category=SubCategory.LOGIN_ISSUE,
+        sentiment=Sentiment.NEGATIVE,
+        priority=Priority.HIGH,
+        confidence=90,
+        summary="Customer cannot log in.",
+        theme_names=["Login Issue", "Login Issue"],
+    )
+
+    assert [t.name for t in updated.themes] == ["Login Issue"]
+
+
 def test_get_or_create_theme_deduplicates(db_session):
     first = crud.get_or_create_theme(db_session, "Slow Dashboard")
     second = crud.get_or_create_theme(db_session, "Slow Dashboard")
