@@ -20,6 +20,16 @@ def test_create_feedback_with_themes(db_session):
     assert theme_names == {"Slow Dashboard", "Performance"}
 
 
+def test_create_feedback_logs_warning_on_duplicate_text(db_session, caplog):
+    crud.create_feedback(db_session, raw_text="Duplicate me.")
+
+    with caplog.at_level("WARNING"):
+        second = crud.create_feedback(db_session, raw_text="Duplicate me.")
+
+    assert second.id is not None
+    assert "duplicate" in caplog.text.lower()
+
+
 def test_get_or_create_theme_deduplicates(db_session):
     first = crud.get_or_create_theme(db_session, "Slow Dashboard")
     second = crud.get_or_create_theme(db_session, "Slow Dashboard")

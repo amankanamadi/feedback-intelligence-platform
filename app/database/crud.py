@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.models import Feedback, MainCategory, Priority, Sentiment, SubCategory, Theme
+
+logger = logging.getLogger(__name__)
 
 
 def get_or_create_theme(db: Session, name: str) -> Theme:
@@ -16,6 +20,13 @@ def get_or_create_theme(db: Session, name: str) -> Theme:
 
 
 def create_feedback(db: Session, raw_text: str, theme_names: list[str] | None = None) -> Feedback:
+    existing_id = db.scalar(select(Feedback.id).where(Feedback.raw_text == raw_text).limit(1))
+    if existing_id is not None:
+        logger.warning(
+            "Duplicate feedback submission: identical raw_text already exists as feedback %s",
+            existing_id,
+        )
+
     feedback = Feedback(raw_text=raw_text)
     if theme_names:
         feedback.themes = [get_or_create_theme(db, name) for name in theme_names]

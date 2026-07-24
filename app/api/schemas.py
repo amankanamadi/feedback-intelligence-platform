@@ -10,6 +10,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class FeedbackCreate(BaseModel):
     raw_text: str = Field(min_length=1, max_length=10_000)
 
+    @field_validator("raw_text")
+    @classmethod
+    def _reject_whitespace_only(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("raw_text must not be empty or whitespace-only")
+        return stripped
+
 
 class FeedbackRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)

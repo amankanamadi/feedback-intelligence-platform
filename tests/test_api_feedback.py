@@ -24,6 +24,20 @@ def test_submit_feedback_rejects_empty_text(client, mock_ai):
     mock_ai["classify"].assert_not_called()
 
 
+def test_submit_feedback_rejects_whitespace_only_text(client, mock_ai):
+    response = client.post("/feedback", json={"raw_text": "   \n\t  "})
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_submit_feedback_strips_surrounding_whitespace(client, mock_ai):
+    response = client.post("/feedback", json={"raw_text": "  Dashboard is slow.  "})
+
+    assert response.status_code == 201
+    assert response.json()["raw_text"] == "Dashboard is slow."
+
+
 def test_submit_feedback_degrades_gracefully_on_classification_failure(client, mock_ai):
     mock_ai["classify"].side_effect = RuntimeError("OpenAI is down")
 
