@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import TypeVar
 
 from pydantic import BaseModel
 
-from app.ai.client import get_openai_client
+from app.ai.client import describe_openai_error, get_openai_client
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -40,7 +43,9 @@ def get_structured_completion(
         # other SDK-level failure. Standardizing on one error type here
         # means every caller's existing `except Exception` handling
         # continues to work unchanged.
-        raise StructuredCompletionError(f"OpenAI structured completion failed: {exc}") from exc
+        reason = describe_openai_error(exc)
+        logger.warning("OpenAI structured completion failed: %s", reason)
+        raise StructuredCompletionError(f"OpenAI structured completion failed: {reason}") from exc
 
     choice = completion.choices[0]
     if choice.message.refusal:

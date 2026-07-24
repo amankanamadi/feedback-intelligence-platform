@@ -78,5 +78,8 @@ def test_get_structured_completion_wraps_unexpected_exceptions(monkeypatch):
     client.beta.chat.completions.parse.side_effect = RuntimeError("connection reset")
     monkeypatch.setattr("app.ai.structured_output.get_openai_client", lambda: client)
 
-    with pytest.raises(StructuredCompletionError, match="connection reset"):
+    # The raw exception message is categorized (via describe_openai_error)
+    # rather than echoed verbatim - see tests/test_ai_client.py for coverage
+    # of the categorization itself.
+    with pytest.raises(StructuredCompletionError, match="unexpected error"):
         get_structured_completion([{"role": "user", "content": "hi"}], FeedbackClassification)
