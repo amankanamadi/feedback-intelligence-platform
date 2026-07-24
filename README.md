@@ -4,19 +4,26 @@ AI-powered customer feedback intelligence system (FastAPI, OpenAI, RAG,
 PostgreSQL + pgvector). See `AI_Customer_Feedback_Intelligence_Architecture.md`
 in the repo root for the full architecture.
 
-## Option A: Local development (venv + local Postgres)
+## Database: one shared Postgres for both local dev and Docker
 
-Requires the `vector` extension available to your local Postgres (built in
-via the `pgvector/pgvector` Docker image for Option B; for a native install
-like Postgres.app, build it from source once against your Postgres's
-`pg_config` — see https://github.com/pgvector/pgvector#installation).
+Docker Compose's `db` service (`pgvector/pgvector:pg17`) publishes port
+`5432` to your host, so it's the single source of truth for both a local
+`uvicorn` run and the containerized app — no separate local Postgres
+install needed, and no data drift between "running it locally" and "running
+it in Docker."
 
 ```bash
 cd feedback-intelligence-platform
+cp .env.example .env   # then fill in OPENAI_API_KEY at minimum
+docker compose up -d db   # just the shared database, exposed on localhost:5432
+```
+
+### Option A: Local dev (venv + shared Docker database)
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # then fill in OPENAI_API_KEY and DATABASE_URL
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
@@ -27,26 +34,28 @@ Open http://127.0.0.1:8000/dashboard, or verify the API directly:
 curl http://127.0.0.1:8000/health
 ```
 
-## Option B: Docker Compose
-
-Builds the app image, starts Postgres, runs migrations, then starts the app —
-no local Python/Postgres install needed at all.
+### Option B: Fully containerized (app + migrations also in Docker)
 
 ```bash
-cd feedback-intelligence-platform
-cp .env.example .env   # then fill in OPENAI_API_KEY at minimum
 docker compose up --build
 ```
 
-Open http://127.0.0.1:8000/dashboard once it's up. Vector search runs inside
-Postgres itself (pgvector), so there's only one datastore to persist —
-`postgres_data`. To stop and remove containers (keeping volumes/data):
-`docker compose down`. To also wipe all data: `docker compose down -v`.
+Builds the app image, runs migrations, then starts the app in a container —
+no local Python install needed at all. **Don't run this at the same time as
+Option A** — both bind to host port 8000, so pick one or the other for
+serving traffic; the shared `db` service can stay up either way.
+
+To stop and remove containers (keeping volumes/data): `docker compose down`.
+To also wipe all data: `docker compose down -v`.
 
 `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `UVICORN_WORKERS` in
 `.env` only affect the Compose stack (they configure the containerized
 Postgres and the app's worker count) — they're not read by a local
 `uvicorn app.main:app` run.
+
+**Note:** if you have a native Postgres (e.g. Postgres.app) also listening
+on port 5432, stop it first — only one process can bind that port on the
+host.
 
 ## Tests
 
