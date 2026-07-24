@@ -1,9 +1,10 @@
 import logging
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import OperationalError
 
 from app.api.analytics import router as analytics_router
 from app.api.feedback import router as feedback_router
@@ -23,6 +24,15 @@ app.include_router(feedback_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+@app.exception_handler(OperationalError)
+async def database_unavailable_handler(request: Request, exc: OperationalError) -> JSONResponse:
+    logger.error("Database unavailable while handling %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Service temporarily unavailable. Please try again shortly."},
+    )
 
 
 @app.get("/health")

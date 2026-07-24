@@ -1,3 +1,5 @@
+from sqlalchemy.exc import OperationalError
+
 from app.ai.schemas import FeedbackClassification
 from app.database.models import MainCategory, Priority, Sentiment, SubCategory
 
@@ -77,6 +79,20 @@ def test_submit_feedback_degrades_gracefully_on_embedding_failure(client, mock_a
     body = response.json()
     assert body["main_category"] == "Incident"  # classification still ran
     mock_ai["store"].assert_not_called()  # no embedding available to store
+
+
+def test_submit_feedback_returns_503_when_database_unavailable(client, mock_ai, monkeypatch):
+    import app.api.feedback as feedback_module
+
+    def _raise_operational_error(*args, **kwargs):
+        raise OperationalError("INSERT INTO feedback ...", {}, Exception("connection refused"))
+
+    monkeypatch.setattr(feedback_module.crud, "create_feedback", _raise_operational_error)
+
+    response = client.post("/feedback", json={"raw_text": "Anything at all."})
+
+    assert response.status_code == 503
+    assert "unavailable" in response.json()["detail"].lower()
 
 
 def test_get_feedback_not_found(client, mock_ai):

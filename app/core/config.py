@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 30.0
     openai_max_retries: int = 2
 
+    # Cosine distance beyond which a "similar" match is excluded as
+    # irrelevant - 1.0 is the point where cosine similarity turns
+    # non-positive (no genuine semantic relationship).
+    rag_max_distance: float = 1.0
+    rag_query_timeout_ms: int = 2000
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
