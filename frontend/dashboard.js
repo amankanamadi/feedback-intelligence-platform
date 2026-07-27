@@ -1,4 +1,27 @@
 let sentimentChart, categoryChart, confidenceChart, trendChart, themeChart, feedbackModal;
+let clientContext;
+
+function detectClientContext() {
+  const ua = navigator.userAgent;
+
+  let browser = "Unknown";
+  if (/Edg\//.test(ua)) browser = "Edge";
+  else if (/OPR\//.test(ua)) browser = "Opera";
+  else if (/Chrome\//.test(ua)) browser = "Chrome";
+  else if (/Firefox\//.test(ua)) browser = "Firefox";
+  else if (/Safari\//.test(ua)) browser = "Safari";
+
+  let platform = "Unknown";
+  if (/Windows/.test(ua)) platform = "Windows";
+  else if (/Android/.test(ua)) platform = "Android";
+  else if (/iPhone|iPad|iPod/.test(ua)) platform = "iOS";
+  else if (/Mac OS X/.test(ua)) platform = "macOS";
+  else if (/Linux/.test(ua)) platform = "Linux";
+
+  const device = /Mobi|Android/i.test(ua) ? "Mobile" : "Desktop";
+
+  return { device, browser, platform };
+}
 
 async function fetchJSON(url) {
   const res = await fetch(url);
@@ -144,9 +167,13 @@ function buildFeedbackQuery() {
   const params = new URLSearchParams();
   const category = document.getElementById("filter-category").value;
   const sentiment = document.getElementById("filter-sentiment").value;
+  const source = document.getElementById("filter-source").value;
+  const product = document.getElementById("filter-product").value.trim();
   const search = document.getElementById("search-input").value.trim();
   if (category) params.set("main_category", category);
   if (sentiment) params.set("sentiment", sentiment);
+  if (source) params.set("source", source);
+  if (product) params.set("product", product);
   if (search) params.set("search", search);
   params.set("limit", "50");
   return params.toString();
@@ -197,6 +224,14 @@ async function showFeedbackDetail(id) {
     <p><strong>Confidence:</strong> ${f.confidence ?? "-"}</p>
     <p><strong>Summary:</strong> ${escapeHtml(f.summary)}</p>
     <p><strong>Themes:</strong> ${f.themes.length ? f.themes.map(escapeHtml).join(", ") : "-"}</p>
+    <hr>
+    <p><strong>Source:</strong> ${f.source ?? "-"}</p>
+    <p><strong>Product / Module / Version:</strong> ${escapeHtml(f.product) || "-"} / ${escapeHtml(f.module) || "-"} / ${escapeHtml(f.version) || "-"}</p>
+    <p><strong>User ID:</strong> ${escapeHtml(f.user_id) || "-"}</p>
+    <p><strong>Name:</strong> ${escapeHtml(f.name) || "-"}</p>
+    <p><strong>Email:</strong> ${escapeHtml(f.email) || "-"}</p>
+    <p><strong>Region:</strong> ${escapeHtml(f.region) || "-"}</p>
+    <p><strong>Device / Browser / Platform:</strong> ${escapeHtml(f.device) || "-"} / ${escapeHtml(f.browser) || "-"} / ${escapeHtml(f.platform) || "-"}</p>
     <p class="text-muted small mb-0">Created: ${new Date(f.created_at).toLocaleString()}</p>
   `;
   feedbackModal.show();
@@ -209,9 +244,15 @@ async function refreshAll() {
 document.addEventListener("DOMContentLoaded", () => {
   feedbackModal = new bootstrap.Modal(document.getElementById("feedback-modal"));
 
+  clientContext = detectClientContext();
+  document.getElementById("detected-context").textContent =
+    `Detected: ${clientContext.device} · ${clientContext.browser} · ${clientContext.platform}`;
+
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
   document.getElementById("filter-category").addEventListener("change", loadFeedbackTable);
   document.getElementById("filter-sentiment").addEventListener("change", loadFeedbackTable);
+  document.getElementById("filter-source").addEventListener("change", loadFeedbackTable);
+  document.getElementById("filter-product").addEventListener("input", debounce(loadFeedbackTable, 300));
   document.getElementById("search-input").addEventListener("input", debounce(loadFeedbackTable, 300));
 
   document.getElementById("feedback-form").addEventListener("submit", async (event) => {
@@ -226,14 +267,32 @@ document.addEventListener("DOMContentLoaded", () => {
     submitBtn.textContent = "Classifying...";
     statusEl.textContent = "";
 
+    const payload = {
+      raw_text: text,
+      source: document.getElementById("feedback-source").value,
+      ...clientContext,
+    };
+    const optionalTextFields = {
+      product: document.getElementById("feedback-product").value.trim(),
+      module: document.getElementById("feedback-module").value.trim(),
+      version: document.getElementById("feedback-version").value.trim(),
+      user_id: document.getElementById("feedback-user-id").value.trim(),
+      name: document.getElementById("feedback-name").value.trim(),
+      email: document.getElementById("feedback-email").value.trim(),
+      region: document.getElementById("feedback-region").value.trim(),
+    };
+    for (const [key, value] of Object.entries(optionalTextFields)) {
+      if (value) payload[key] = value;
+    }
+
     try {
       const res = await fetch("/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw_text: text }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Submit failed (${res.status})`);
-      textInput.value = "";
+      event.target.reset();
       statusEl.textContent = "Feedback submitted and classified.";
       await refreshAll();
     } catch (err) {

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.ai.classification import classify_feedback
 from app.api.schemas import BulkFeedbackCreate, FeedbackCreate, FeedbackRead
 from app.database import crud
-from app.database.models import Feedback, MainCategory, Sentiment
+from app.database.models import Feedback, FeedbackSource, MainCategory, Sentiment
 from app.database.session import get_db
 from app.vector_store.embeddings import get_embedding
 from app.vector_store.retrieval import retrieve_similar_feedback
@@ -98,6 +98,8 @@ def list_feedback(
     main_category: Optional[MainCategory] = Query(None),
     sentiment: Optional[Sentiment] = Query(None),
     search: Optional[str] = Query(None, min_length=1, max_length=200),
+    source: Optional[FeedbackSource] = Query(None),
+    product: Optional[str] = Query(None, min_length=1, max_length=100),
     db: Session = Depends(get_db),
 ) -> list[FeedbackRead]:
     return crud.list_feedback(
@@ -107,6 +109,8 @@ def list_feedback(
         main_category=main_category,
         sentiment=sentiment,
         search=search,
+        source=source,
+        product=product,
     )
 
 

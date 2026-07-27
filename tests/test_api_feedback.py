@@ -315,3 +315,27 @@ def test_bulk_upload_captures_metadata_independently_per_item(client, mock_ai):
     assert body[0]["product"] == "Invoicing"
     assert body[1]["source"] is None
     assert body[1]["product"] is None
+
+
+def test_list_feedback_filters_by_source(client, mock_ai):
+    client.post("/feedback", json={"raw_text": "Via email.", "source": "Email"})
+    client.post("/feedback", json={"raw_text": "Via web form.", "source": "Web Form"})
+
+    response = client.get("/feedback", params={"source": "Email"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["raw_text"] == "Via email."
+
+
+def test_list_feedback_filters_by_product_partial_match(client, mock_ai):
+    client.post("/feedback", json={"raw_text": "Invoicing bug.", "product": "Invoicing"})
+    client.post("/feedback", json={"raw_text": "Unrelated.", "product": "Payroll"})
+
+    response = client.get("/feedback", params={"product": "invoic"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["raw_text"] == "Invoicing bug."

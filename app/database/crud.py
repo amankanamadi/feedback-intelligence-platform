@@ -140,6 +140,8 @@ def list_feedback(
     main_category: MainCategory | None = None,
     sentiment: Sentiment | None = None,
     search: str | None = None,
+    source: FeedbackSource | None = None,
+    product: str | None = None,
 ) -> list[Feedback]:
     stmt = select(Feedback).order_by(Feedback.created_at.desc())
     if main_category is not None:
@@ -148,5 +150,9 @@ def list_feedback(
         stmt = stmt.where(Feedback.sentiment == sentiment)
     if search:
         stmt = stmt.where(Feedback.raw_text.ilike(f"%{search}%"))
+    if source is not None:
+        stmt = stmt.where(Feedback.source == source)
+    if product:
+        stmt = stmt.where(Feedback.product.ilike(f"%{product}%"))
     stmt = stmt.offset(skip).limit(limit)
     return list(db.scalars(stmt))

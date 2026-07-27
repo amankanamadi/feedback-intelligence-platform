@@ -182,3 +182,23 @@ def test_list_feedback_respects_pagination(db_session):
     page = crud.list_feedback(db_session, skip=2, limit=2)
 
     assert len(page) == 2
+
+
+def test_list_feedback_filters_by_source(db_session):
+    crud.create_feedback(db_session, raw_text="Via email.", source=FeedbackSource.EMAIL)
+    crud.create_feedback(db_session, raw_text="Via web form.", source=FeedbackSource.WEB_FORM)
+
+    results = crud.list_feedback(db_session, source=FeedbackSource.EMAIL)
+
+    assert len(results) == 1
+    assert results[0].raw_text == "Via email."
+
+
+def test_list_feedback_filters_by_product_partial_match(db_session):
+    crud.create_feedback(db_session, raw_text="Invoicing bug.", product="Invoicing")
+    crud.create_feedback(db_session, raw_text="Unrelated.", product="Payroll")
+
+    results = crud.list_feedback(db_session, product="invoic")
+
+    assert len(results) == 1
+    assert results[0].raw_text == "Invoicing bug."

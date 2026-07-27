@@ -56,9 +56,53 @@
 
     <div class="card p-3 mb-4">
       <h6>Submit Feedback</h6>
-      <form id="feedback-form" class="d-flex gap-2">
-        <input type="text" id="feedback-text" class="form-control" placeholder="Enter customer feedback..." required>
-        <button class="btn btn-primary" type="submit">Submit</button>
+      <form id="feedback-form">
+        <div class="row g-2 mb-2">
+          <div class="col-12">
+            <input type="text" id="feedback-text" class="form-control" placeholder="Enter customer feedback..." required>
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-3">
+            <select id="feedback-source" class="form-select">
+              <option value="Web Form">Web Form</option>
+              <option value="In-App Widget">In-App Widget</option>
+              <option value="Mobile App">Mobile App</option>
+              <option value="Email">Email</option>
+              <option value="API">API</option>
+              <option value="Survey">Survey</option>
+              <option value="Chatbot">Chatbot</option>
+              <option value="QR Code">QR Code</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="feedback-product" class="form-control" placeholder="Product">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="feedback-module" class="form-control" placeholder="Module">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="feedback-version" class="form-control" placeholder="Version">
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-3">
+            <input type="text" id="feedback-user-id" class="form-control" placeholder="User ID">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="feedback-name" class="form-control" placeholder="Name">
+          </div>
+          <div class="col-md-3">
+            <input type="email" id="feedback-email" class="form-control" placeholder="Email">
+          </div>
+          <div class="col-md-3">
+            <input type="text" id="feedback-region" class="form-control" placeholder="Region">
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-primary" type="submit">Submit</button>
+          <span id="detected-context" class="text-muted small"></span>
+        </div>
       </form>
       <div id="feedback-form-status" class="form-text"></div>
     </div>
@@ -80,6 +124,22 @@
             <option value="Neutral">Neutral</option>
             <option value="Negative">Negative</option>
           </select>
+        </div>
+        <div class="col-md-3">
+          <select id="filter-source" class="form-select">
+            <option value="">All Sources</option>
+            <option value="Web Form">Web Form</option>
+            <option value="In-App Widget">In-App Widget</option>
+            <option value="Mobile App">Mobile App</option>
+            <option value="Email">Email</option>
+            <option value="API">API</option>
+            <option value="Survey">Survey</option>
+            <option value="Chatbot">Chatbot</option>
+            <option value="QR Code">QR Code</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <input type="text" id="filter-product" class="form-control" placeholder="Filter by product...">
         </div>
         <div class="col-md-6">
           <input type="text" id="search-input" class="form-control" placeholder="Search feedback text...">
