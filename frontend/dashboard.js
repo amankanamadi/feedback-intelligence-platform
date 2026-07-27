@@ -23,6 +23,36 @@ function detectClientContext() {
   return { device, browser, platform };
 }
 
+// Fields with no genuine client-side signal (no per-product config, no
+// business-region API) - synthetic sample values, freshly randomized per
+// submission rather than left permanently null.
+const PRODUCTS = ["Invoicing", "Reporting", "Payments", "Onboarding", "Analytics"];
+const MODULES = ["Uploads", "Checkout", "Dashboard", "Settings", "Notifications"];
+const VERSIONS = ["1.4.2", "2.0.0", "2.3.1", "3.1.0", "4.0.0-beta"];
+const REGIONS = ["US-East", "US-West", "EU-West", "APAC", "LATAM"];
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function generateSyntheticMetadata() {
+  return { product: pick(PRODUCTS), module: pick(MODULES), version: pick(VERSIONS), region: pick(REGIONS) };
+}
+
+// user_id is derived from whatever identity the person actually typed
+// (email preferred as the more stable identifier, name as a fallback)
+// rather than randomized independently of it.
+function deriveUserId(name, email) {
+  const source = email || name;
+  if (!source) return null;
+  return source
+    .split("@")[0]
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+}
+
 async function fetchJSON(url) {
   const res = await fetch(url);
   if (!res.ok) {
@@ -183,7 +213,7 @@ function renderFeedbackTable(items) {
   const tbody = document.getElementById("feedback-table-body");
 
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">No feedback found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No feedback found.</td></tr>`;
     return;
   }
 
@@ -193,6 +223,8 @@ function renderFeedbackTable(items) {
         <tr data-id="${f.id}" class="feedback-row">
           <td>${f.id}</td>
           <td>${escapeHtml(f.raw_text).slice(0, 80)}</td>
+          <td>${f.source ?? "-"}</td>
+          <td>${escapeHtml(f.product) || "-"}</td>
           <td>${f.main_category ?? "-"}</td>
           <td>${f.sentiment ?? "-"}</td>
           <td>${f.priority ?? "-"}</td>
@@ -267,23 +299,19 @@ document.addEventListener("DOMContentLoaded", () => {
     submitBtn.textContent = "Classifying...";
     statusEl.textContent = "";
 
+    const name = document.getElementById("feedback-name").value.trim();
+    const email = document.getElementById("feedback-email").value.trim();
+
     const payload = {
       raw_text: text,
-      source: document.getElementById("feedback-source").value,
+      source: "Web Form",
       ...clientContext,
+      ...generateSyntheticMetadata(),
     };
-    const optionalTextFields = {
-      product: document.getElementById("feedback-product").value.trim(),
-      module: document.getElementById("feedback-module").value.trim(),
-      version: document.getElementById("feedback-version").value.trim(),
-      user_id: document.getElementById("feedback-user-id").value.trim(),
-      name: document.getElementById("feedback-name").value.trim(),
-      email: document.getElementById("feedback-email").value.trim(),
-      region: document.getElementById("feedback-region").value.trim(),
-    };
-    for (const [key, value] of Object.entries(optionalTextFields)) {
-      if (value) payload[key] = value;
-    }
+    if (name) payload.name = name;
+    if (email) payload.email = email;
+    const userId = deriveUserId(name, email);
+    if (userId) payload.user_id = userId;
 
     try {
       const res = await fetch("/feedback", {
