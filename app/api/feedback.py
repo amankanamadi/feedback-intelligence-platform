@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.ai.classification import classify_feedback
-from app.api.schemas import FeedbackCreate, FeedbackRead
+from app.api.schemas import BulkFeedbackCreate, FeedbackCreate, FeedbackRead
 from app.database import crud
-from app.database.models import MainCategory, Sentiment
+from app.database.models import Feedback, MainCategory, Sentiment
 from app.database.session import get_db
 from app.vector_store.embeddings import get_embedding
 from app.vector_store.retrieval import retrieve_similar_feedback
@@ -17,14 +17,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["feedback"])
 
 
-@router.post("/feedback", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
-def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> FeedbackRead:
-    feedback = crud.create_feedback(db, raw_text=payload.raw_text)
+def _process_feedback_submission(db: Session, raw_text: str) -> Feedback:
+    """Create + embed + retrieve RAG context + classify a single item.
+
+    Shared by the single-item and bulk endpoints so both go through
+    identical logic. Each step degrades independently on failure (a failed
+    embedding/classification never blocks storing the raw feedback).
+    """
+    feedback = crud.create_feedback(db, raw_text=raw_text)
 
     embedding = None
     similar_examples: list[dict] = []
     try:
-        embedding = get_embedding(payload.raw_text)
+        embedding = get_embedding(raw_text)
         similar_examples = retrieve_similar_feedback(db, embedding, n_results=3, exclude_id=feedback.id)
     except Exception:
         logger.exception(
@@ -33,7 +38,7 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
         )
 
     try:
-        classification = classify_feedback(payload.raw_text, similar_examples=similar_examples)
+        classification = classify_feedback(raw_text, similar_examples=similar_examples)
     except Exception:
         logger.exception("AI classification failed for feedback %s; leaving unclassified", feedback.id)
     else:
@@ -60,6 +65,16 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
             logger.exception("Embedding storage failed for feedback %s", feedback.id)
 
     return feedback
+
+
+@router.post("/feedback", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
+def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> FeedbackRead:
+    return _process_feedback_submission(db, payload.raw_text)
+
+
+@router.post("/bulk-upload", response_model=list[FeedbackRead], status_code=status.HTTP_201_CREATED)
+def bulk_upload_feedback(payload: BulkFeedbackCreate, db: Session = Depends(get_db)) -> list[FeedbackRead]:
+    return [_process_feedback_submission(db, item.raw_text) for item in payload.items]
 
 
 @router.get("/feedback", response_model=list[FeedbackRead])

@@ -2,6 +2,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.ai.schemas import FeedbackClassification
 from app.database.models import MainCategory, Priority, Sentiment, SubCategory
+from tests.conftest import DEFAULT_CLASSIFICATION
 
 
 def test_submit_feedback_success(client, mock_ai):
@@ -183,3 +184,63 @@ def test_list_feedback_pagination(client, mock_ai):
     page = client.get("/feedback", params={"skip": 2, "limit": 2}).json()
 
     assert len(page) == 2
+
+
+def test_bulk_upload_processes_all_items_in_order(client, mock_ai):
+    response = client.post(
+        "/bulk-upload",
+        json={"items": [{"raw_text": "First item."}, {"raw_text": "Second item."}, {"raw_text": "Third item."}]},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert [item["raw_text"] for item in body] == ["First item.", "Second item.", "Third item."]
+    assert all(item["main_category"] == "Incident" for item in body)
+    assert mock_ai["classify"].call_count == 3
+    assert mock_ai["store"].call_count == 3
+
+
+def test_bulk_upload_rejects_empty_items_list(client, mock_ai):
+    response = client.post("/bulk-upload", json={"items": []})
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_bulk_upload_rejects_batch_exceeding_max_size(client, mock_ai):
+    items = [{"raw_text": f"Feedback {i}"} for i in range(26)]
+
+    response = client.post("/bulk-upload", json={"items": items})
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_bulk_upload_rejects_whole_batch_if_any_item_is_invalid(client, mock_ai):
+    response = client.post(
+        "/bulk-upload",
+        json={"items": [{"raw_text": "A valid entry."}, {"raw_text": "   "}]},
+    )
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_bulk_upload_continues_past_individual_classification_failures(client, mock_ai):
+    mock_ai["classify"].side_effect = [
+        DEFAULT_CLASSIFICATION,
+        RuntimeError("OpenAI is down"),
+        DEFAULT_CLASSIFICATION,
+    ]
+
+    response = client.post(
+        "/bulk-upload",
+        json={"items": [{"raw_text": "First item."}, {"raw_text": "Second item."}, {"raw_text": "Third item."}]},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert len(body) == 3
+    assert body[0]["main_category"] == "Incident"
+    assert body[1]["main_category"] is None  # failed item still stored, left unclassified
+    assert body[2]["main_category"] == "Incident"

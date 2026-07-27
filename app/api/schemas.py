@@ -42,6 +42,15 @@ class FeedbackCreate(BaseModel):
         return cleaned
 
 
+class BulkFeedbackCreate(BaseModel):
+    # Reuses FeedbackCreate's own validators (whitespace/empty rejection,
+    # dangerous-character stripping, repetition guard) for every item via
+    # Pydantic's nested-model validation - no new validation logic needed.
+    # Capped to keep worst-case request latency bounded (each item costs
+    # roughly two sequential OpenAI calls).
+    items: list[FeedbackCreate] = Field(min_length=1, max_length=25)
+
+
 class FeedbackRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
