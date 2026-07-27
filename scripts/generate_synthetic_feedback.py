@@ -2,6 +2,7 @@
 manually against the real OpenAI API:
 
     python scripts/generate_synthetic_feedback.py
+    python scripts/generate_synthetic_feedback.py --output scripts/synthetic_dataset_batch2.json --per-topic 5
 
 Generates raw text only - no category, sentiment, priority, or theme
 labels are produced or stored anywhere. The taxonomy below is used purely
@@ -22,6 +23,7 @@ Output: scripts/synthetic_dataset.json, a flat JSON array of strings.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -34,7 +36,8 @@ from app.ai.prompt_builder import build_messages  # noqa: E402
 from app.ai.structured_output import get_structured_completion  # noqa: E402
 from app.database.models import MainCategory, SubCategory  # noqa: E402
 
-TEXTS_PER_TOPIC = 3
+DEFAULT_OUTPUT_PATH = Path(__file__).resolve().parent / "synthetic_dataset.json"
+DEFAULT_TEXTS_PER_TOPIC = 3
 
 SYSTEM_PROMPT = """You are helping generate realistic synthetic customer
 feedback for a SaaS product, to seed test data for a feedback intelligence
@@ -80,13 +83,13 @@ class SyntheticText(BaseModel):
     raw_text: str
 
 
-def generate_texts() -> list[str]:
+def generate_texts(texts_per_topic: int) -> list[str]:
     texts: list[str] = []
-    total = len(TOPIC_HINTS) * TEXTS_PER_TOPIC
+    total = len(TOPIC_HINTS) * texts_per_topic
     done = 0
     for main_category, sub_category in TOPIC_HINTS:
         topic_hint = f"{main_category.value} / {sub_category.value}"
-        for _ in range(TEXTS_PER_TOPIC):
+        for _ in range(texts_per_topic):
             messages = build_messages(SYSTEM_PROMPT, f"Topic area (inspiration only): {topic_hint}")
             generated = get_structured_completion(messages, SyntheticText)
             texts.append(generated.raw_text)
@@ -96,10 +99,14 @@ def generate_texts() -> list[str]:
 
 
 def main() -> None:
-    texts = generate_texts()
-    output_path = Path(__file__).resolve().parent / "synthetic_dataset.json"
-    output_path.write_text(json.dumps(texts, indent=2))
-    print(f"\nWrote {len(texts)} raw feedback strings to {output_path}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH)
+    parser.add_argument("--per-topic", type=int, default=DEFAULT_TEXTS_PER_TOPIC)
+    args = parser.parse_args()
+
+    texts = generate_texts(args.per_topic)
+    args.output.write_text(json.dumps(texts, indent=2))
+    print(f"\nWrote {len(texts)} raw feedback strings to {args.output}")
 
 
 if __name__ == "__main__":
