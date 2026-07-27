@@ -26,6 +26,18 @@ app.include_router(reports_router)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
+@app.middleware("http")
+async def no_cache_for_frontend(request: Request, call_next):
+    """The dashboard is under active development - without this, browsers'
+    heuristic caching can keep serving an old dashboard.js/index.html for a
+    tab that's never been hard-refreshed, silently desyncing from the
+    server (e.g. new table columns rendered by old JS)."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static") or request.url.path == "/dashboard":
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.exception_handler(OperationalError)
 async def database_unavailable_handler(request: Request, exc: OperationalError) -> JSONResponse:
     logger.error("Database unavailable while handling %s %s: %s", request.method, request.url.path, exc)

@@ -197,13 +197,9 @@ function buildFeedbackQuery() {
   const params = new URLSearchParams();
   const category = document.getElementById("filter-category").value;
   const sentiment = document.getElementById("filter-sentiment").value;
-  const source = document.getElementById("filter-source").value;
-  const product = document.getElementById("filter-product").value.trim();
   const search = document.getElementById("search-input").value.trim();
   if (category) params.set("main_category", category);
   if (sentiment) params.set("sentiment", sentiment);
-  if (source) params.set("source", source);
-  if (product) params.set("product", product);
   if (search) params.set("search", search);
   params.set("limit", "50");
   return params.toString();
@@ -283,8 +279,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
   document.getElementById("filter-category").addEventListener("change", loadFeedbackTable);
   document.getElementById("filter-sentiment").addEventListener("change", loadFeedbackTable);
-  document.getElementById("filter-source").addEventListener("change", loadFeedbackTable);
-  document.getElementById("filter-product").addEventListener("input", debounce(loadFeedbackTable, 300));
   document.getElementById("search-input").addEventListener("input", debounce(loadFeedbackTable, 300));
 
   document.getElementById("feedback-form").addEventListener("submit", async (event) => {
