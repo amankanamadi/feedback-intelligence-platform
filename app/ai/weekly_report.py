@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.ai.prompt_builder import build_messages
+from app.ai.prompt_builder import PROMPT_INJECTION_GUARD, build_messages
 from app.ai.schemas import WeeklyNarrative
 from app.ai.structured_output import get_structured_completion
 from app.analytics.schemas import AnalyticsSummary
@@ -26,7 +26,7 @@ Produce:
   support leader could take this week.
 
 Synthesize and prioritize; do not simply restate the raw data back verbatim.
-"""
+""" + PROMPT_INJECTION_GUARD
 
 
 def _format_metrics(metrics: AnalyticsSummary) -> str:

@@ -40,6 +40,38 @@ def test_submit_feedback_strips_surrounding_whitespace(client, mock_ai):
     assert response.json()["raw_text"] == "Dashboard is slow."
 
 
+def test_submit_feedback_strips_zero_width_characters(client, mock_ai):
+    zero_width_space = chr(0x200B)
+    raw_text = f"The{zero_width_space}dashboard{zero_width_space}is{zero_width_space}slow."
+
+    response = client.post("/feedback", json={"raw_text": raw_text})
+
+    assert response.status_code == 201
+    assert response.json()["raw_text"] == "Thedashboardisslow."
+
+
+def test_submit_feedback_rejects_text_that_is_only_zero_width_characters(client, mock_ai):
+    only_zero_width = chr(0x200B) + chr(0x200C) + chr(0x200D)
+
+    response = client.post("/feedback", json={"raw_text": only_zero_width})
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_submit_feedback_rejects_excessive_character_repetition(client, mock_ai):
+    response = client.post("/feedback", json={"raw_text": "a" * 100})
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_submit_feedback_allows_normal_repeated_punctuation(client, mock_ai):
+    response = client.post("/feedback", json={"raw_text": "This is sooooo slow!!!!"})
+
+    assert response.status_code == 201
+
+
 def test_submit_feedback_degrades_gracefully_on_classification_failure(client, mock_ai):
     mock_ai["classify"].side_effect = RuntimeError("OpenAI is down")
 

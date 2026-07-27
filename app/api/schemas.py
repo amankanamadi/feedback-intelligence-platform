@@ -1,10 +1,31 @@
 from __future__ import annotations
 
 import enum
+import re
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Built from bare codepoints (via chr()) rather than embedding the actual
+# invisible/control characters in this source file, which would be both
+# unreadable and easy to silently corrupt in an editor.
+_DANGEROUS_CODEPOINT_RANGES = [
+    (0x200B, 0x200F),  # zero-width space/joiners, LRM/RLM marks (obfuscation)
+    (0x202A, 0x202E),  # bidi embedding/override controls (visual spoofing)
+    (0x2066, 0x2069),  # bidi isolate controls
+    (0xFEFF, 0xFEFF),  # BOM / zero-width no-break space
+    (0x00, 0x08),  # C0 controls before tab
+    (0x0B, 0x0C),  # vertical tab, form feed
+    (0x0E, 0x1F),  # C0 controls after CR, before space
+    (0x7F, 0x7F),  # DEL
+]
+_DANGEROUS_CHARS = re.compile(
+    "[" + "".join(f"{chr(lo)}-{chr(hi)}" for lo, hi in _DANGEROUS_CODEPOINT_RANGES) + "]"
+)
+# The same character repeated 40+ times in a row - not something legitimate
+# feedback does, but a cheap way to waste tokens/cost on every AI call.
+_EXCESSIVE_REPETITION = re.compile(r"(.)\1{39,}")
 
 
 class FeedbackCreate(BaseModel):
@@ -12,11 +33,13 @@ class FeedbackCreate(BaseModel):
 
     @field_validator("raw_text")
     @classmethod
-    def _reject_whitespace_only(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
+    def _sanitize_and_validate(cls, v: str) -> str:
+        cleaned = _DANGEROUS_CHARS.sub("", v).strip()
+        if not cleaned:
             raise ValueError("raw_text must not be empty or whitespace-only")
-        return stripped
+        if _EXCESSIVE_REPETITION.search(cleaned):
+            raise ValueError("raw_text contains excessive repeated characters")
+        return cleaned
 
 
 class FeedbackRead(BaseModel):

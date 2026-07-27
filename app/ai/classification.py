@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from app.ai.prompt_builder import build_messages, format_retrieved_context
+from app.ai.prompt_builder import PROMPT_INJECTION_GUARD, build_messages, format_retrieved_context
 from app.ai.schemas import FeedbackClassification
 from app.ai.structured_output import get_structured_completion
 from app.database.models import MainCategory, Priority, Sentiment, SubCategory
@@ -30,7 +30,7 @@ Main Category: General Feedback
 
 Sentiment must be one of: Positive, Neutral, Negative.
 Priority must be one of: Low, Medium, High, Critical.
-"""
+""" + PROMPT_INJECTION_GUARD
 
 
 def _example(main_category, sub_category, sentiment, themes, priority, confidence, summary) -> str:
