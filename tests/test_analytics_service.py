@@ -107,6 +107,112 @@ def test_theme_frequencies_orders_by_count_desc(db_session):
     assert frequencies[1].count == 1
 
 
+def test_analytics_summary_single_entry_gives_clean_100_percent(db_session):
+    _seed_classified(
+        db_session, "only one", MainCategory.INCIDENT, Sentiment.NEGATIVE, Priority.HIGH, 77, ["Solo"]
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    assert summary.total_feedback == 1
+    assert summary.classified_feedback == 1
+    assert summary.negative_pct == 100.0
+    assert summary.positive_pct == 0.0
+    assert summary.neutral_pct == 0.0
+    assert summary.incidents == 1
+    assert summary.service_requests == 0
+    assert summary.general_feedback == 0
+    assert summary.average_confidence == 77.0
+    assert len(summary.weekly_trend) == 1
+    assert summary.weekly_trend[0].count == 1
+
+
+def test_analytics_summary_omits_categories_with_no_data(db_session):
+    _seed_classified(
+        db_session, "a", MainCategory.INCIDENT, Sentiment.NEGATIVE, Priority.HIGH, 90, []
+    )
+    _seed_classified(
+        db_session, "b", MainCategory.INCIDENT, Sentiment.NEGATIVE, Priority.HIGH, 90, []
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    assert summary.incidents == 2
+    assert summary.service_requests == 0
+    assert summary.general_feedback == 0
+    # Only categories that actually have data appear in the chart-ready list -
+    # no phantom zero-count entries for categories with nothing recorded.
+    assert [c.main_category for c in summary.category_breakdown] == ["Incident"]
+
+
+def test_analytics_summary_omits_sentiments_with_no_data(db_session):
+    _seed_classified(
+        db_session, "a", MainCategory.INCIDENT, Sentiment.NEGATIVE, Priority.HIGH, 90, []
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    assert summary.positive_pct == 0.0
+    assert summary.neutral_pct == 0.0
+    assert [s.sentiment for s in summary.sentiment_breakdown] == ["Negative"]
+
+
+def test_analytics_summary_extreme_skew_rounds_sensibly(db_session):
+    for i in range(9):
+        _seed_classified(
+            db_session, f"neg-{i}", MainCategory.INCIDENT, Sentiment.NEGATIVE, Priority.HIGH, 90, []
+        )
+    _seed_classified(
+        db_session, "pos", MainCategory.GENERAL_FEEDBACK, Sentiment.POSITIVE, Priority.LOW, 90, []
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    assert summary.total_feedback == 10
+    assert summary.negative_pct == 90.0
+    assert summary.positive_pct == 10.0
+    assert summary.neutral_pct == 0.0
+
+
+def test_theme_frequencies_empty_when_no_themes_recorded(db_session):
+    _seed_classified(
+        db_session, "no themes", MainCategory.INCIDENT, Sentiment.NEGATIVE, Priority.HIGH, 90, []
+    )
+
+    frequencies = get_theme_frequencies(db_session)
+
+    assert frequencies == []
+
+
+def test_duplicate_raw_text_counted_as_separate_feedback_in_analytics(db_session):
+    _seed_classified(
+        db_session,
+        "Duplicate feedback text.",
+        MainCategory.INCIDENT,
+        Sentiment.NEGATIVE,
+        Priority.HIGH,
+        90,
+        [],
+    )
+    _seed_classified(
+        db_session,
+        "Duplicate feedback text.",
+        MainCategory.INCIDENT,
+        Sentiment.NEGATIVE,
+        Priority.HIGH,
+        90,
+        [],
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    # Phase 1's policy is to allow duplicate submissions (detect + log, never
+    # reject or collapse) - analytics must reflect that, not silently
+    # deduplicate identical text.
+    assert summary.total_feedback == 2
+    assert summary.incidents == 2
+
+
 def test_get_notable_feedback_filters_by_priority(db_session):
     _seed_classified(
         db_session, "urgent", MainCategory.INCIDENT, Sentiment.NEGATIVE, Priority.CRITICAL, 90, []
