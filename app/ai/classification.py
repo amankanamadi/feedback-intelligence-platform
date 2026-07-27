@@ -30,6 +30,21 @@ Main Category: General Feedback
 
 Sentiment must be one of: Positive, Neutral, Negative.
 Priority must be one of: Low, Medium, High, Critical.
+
+Sentiment guidance for tricky cases:
+- Sarcasm/irony: judge the underlying intent from context, not just
+  individual words. "Great, another crash right before my deadline" is
+  Negative despite containing the word "great" - the context (repeated
+  failure, bad timing) reveals frustration, not praise.
+- Mixed sentiment: when feedback expresses both a complaint and a
+  compliment, choose the sentiment that reflects the customer's primary,
+  current disposition - often the outcome or most recent point they make,
+  not a mechanical average. "Support was slow to respond but fixed my
+  issue perfectly, I'm happy now" is Positive (positive outcome, current
+  state); "The feature works but honestly the constant bugs are
+  exhausting" is Negative (the complaint is the dominant point).
+- Do not let surface-level positive or negative words override the actual
+  meaning and context of the message.
 """ + PROMPT_INJECTION_GUARD
 
 
@@ -80,6 +95,33 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
             Priority.LOW,
             97,
             "Customer praises fast and effective support for a billing issue.",
+        ),
+    ),
+    (
+        "Oh wonderful, the app crashed again right when I was about to save my work. "
+        "Just perfect timing as always.",
+        _example(
+            MainCategory.INCIDENT,
+            SubCategory.APPLICATION_CRASH,
+            Sentiment.NEGATIVE,
+            ["App Crash", "Lost Work"],
+            Priority.HIGH,
+            88,
+            "Customer sarcastically reports a recurring app crash that risked losing unsaved work.",
+        ),
+    ),
+    (
+        "The new checkout flow had a rocky start with a few bugs, but the team pushed a fix "
+        "within a day and everything's working smoothly now. Really happy with the responsiveness.",
+        _example(
+            MainCategory.GENERAL_FEEDBACK,
+            SubCategory.APPRECIATION,
+            Sentiment.POSITIVE,
+            ["Quick Bug Fix", "Support Responsiveness"],
+            Priority.LOW,
+            88,
+            "Customer appreciates the team's fast fix of an early checkout bug and is satisfied "
+            "with the outcome.",
         ),
     ),
 ]

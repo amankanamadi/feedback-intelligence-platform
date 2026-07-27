@@ -44,3 +44,27 @@ def test_classify_feedback_obvious_appreciation_is_positive():
 
     assert result.main_category == MainCategory.GENERAL_FEEDBACK
     assert result.sentiment == Sentiment.POSITIVE
+
+
+def test_classify_feedback_sarcasm_is_negative_not_positive():
+    result = classify_feedback(
+        "Oh fantastic, the export button broke again right before my big presentation. "
+        "Just what I needed today."
+    )
+
+    assert result.sentiment == Sentiment.NEGATIVE
+
+
+def test_classify_feedback_negative_wording_with_positive_outcome_is_positive():
+    # The overall verdict must be explicit ("all set up and loving it now"),
+    # not just implied by describing a good resolution - an ambiguous
+    # version of this case (annoyance + good resolution with no stated
+    # verdict) is a genuinely defensible split decision, not a clear-cut
+    # Positive, and shouldn't be asserted as one.
+    result = classify_feedback(
+        "The onboarding process was frustrating with several confusing steps, but the "
+        "support team walked me through everything patiently and now I'm all set up "
+        "and loving the product."
+    )
+
+    assert result.sentiment == Sentiment.POSITIVE
