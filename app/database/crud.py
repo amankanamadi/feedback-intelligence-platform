@@ -5,7 +5,15 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import Feedback, MainCategory, Priority, Sentiment, SubCategory, Theme
+from app.database.models import (
+    Feedback,
+    FeedbackSource,
+    MainCategory,
+    Priority,
+    Sentiment,
+    SubCategory,
+    Theme,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +50,23 @@ def _resolve_themes(db: Session, theme_names: list[str]) -> list[Theme]:
     return [get_or_create_theme(db, name) for name in _dedupe_preserve_order(theme_names)]
 
 
-def create_feedback(db: Session, raw_text: str, theme_names: list[str] | None = None) -> Feedback:
+def create_feedback(
+    db: Session,
+    raw_text: str,
+    theme_names: list[str] | None = None,
+    *,
+    user_id: str | None = None,
+    name: str | None = None,
+    email: str | None = None,
+    source: FeedbackSource | None = None,
+    product: str | None = None,
+    module: str | None = None,
+    version: str | None = None,
+    device: str | None = None,
+    browser: str | None = None,
+    platform: str | None = None,
+    region: str | None = None,
+) -> Feedback:
     existing_id = db.scalar(select(Feedback.id).where(Feedback.raw_text == raw_text).limit(1))
     if existing_id is not None:
         logger.warning(
@@ -50,7 +74,20 @@ def create_feedback(db: Session, raw_text: str, theme_names: list[str] | None = 
             existing_id,
         )
 
-    feedback = Feedback(raw_text=raw_text)
+    feedback = Feedback(
+        raw_text=raw_text,
+        user_id=user_id,
+        name=name,
+        email=email,
+        source=source,
+        product=product,
+        module=module,
+        version=version,
+        device=device,
+        browser=browser,
+        platform=platform,
+        region=region,
+    )
     if theme_names:
         feedback.themes = _resolve_themes(db, theme_names)
 

@@ -1,5 +1,5 @@
 from app.database import crud
-from app.database.models import MainCategory, Priority, Sentiment, SubCategory
+from app.database.models import FeedbackSource, MainCategory, Priority, Sentiment, SubCategory
 
 
 def test_create_feedback_without_themes(db_session):
@@ -38,6 +38,46 @@ def test_create_feedback_dedupes_duplicate_theme_names(db_session):
     )
 
     assert sorted(t.name for t in feedback.themes) == ["Performance", "Slow Dashboard"]
+
+
+def test_create_feedback_persists_metadata_fields(db_session):
+    feedback = crud.create_feedback(
+        db_session,
+        raw_text="Can't upload invoices after today's update.",
+        user_id="user-42",
+        name="Jordan Lee",
+        email="jordan@example.com",
+        source=FeedbackSource.MOBILE_APP,
+        product="Invoicing",
+        module="Uploads",
+        version="3.2.1",
+        device="iPhone 15",
+        browser="Safari",
+        platform="iOS",
+        region="US-East",
+    )
+
+    assert feedback.user_id == "user-42"
+    assert feedback.name == "Jordan Lee"
+    assert feedback.email == "jordan@example.com"
+    assert feedback.source == FeedbackSource.MOBILE_APP
+    assert feedback.product == "Invoicing"
+    assert feedback.module == "Uploads"
+    assert feedback.version == "3.2.1"
+    assert feedback.device == "iPhone 15"
+    assert feedback.browser == "Safari"
+    assert feedback.platform == "iOS"
+    assert feedback.region == "US-East"
+
+
+def test_create_feedback_metadata_fields_default_to_none(db_session):
+    feedback = crud.create_feedback(db_session, raw_text="No metadata here.")
+
+    assert feedback.user_id is None
+    assert feedback.name is None
+    assert feedback.email is None
+    assert feedback.source is None
+    assert feedback.product is None
 
 
 def test_apply_classification_dedupes_duplicate_theme_names(db_session):

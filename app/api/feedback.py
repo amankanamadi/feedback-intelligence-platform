@@ -17,19 +17,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["feedback"])
 
 
-def _process_feedback_submission(db: Session, raw_text: str) -> Feedback:
+def _process_feedback_submission(db: Session, payload: FeedbackCreate) -> Feedback:
     """Create + embed + retrieve RAG context + classify a single item.
 
     Shared by the single-item and bulk endpoints so both go through
     identical logic. Each step degrades independently on failure (a failed
     embedding/classification never blocks storing the raw feedback).
     """
-    feedback = crud.create_feedback(db, raw_text=raw_text)
+    feedback = crud.create_feedback(
+        db,
+        raw_text=payload.raw_text,
+        user_id=payload.user_id,
+        name=payload.name,
+        email=payload.email,
+        source=payload.source,
+        product=payload.product,
+        module=payload.module,
+        version=payload.version,
+        device=payload.device,
+        browser=payload.browser,
+        platform=payload.platform,
+        region=payload.region,
+    )
 
     embedding = None
     similar_examples: list[dict] = []
     try:
-        embedding = get_embedding(raw_text)
+        embedding = get_embedding(payload.raw_text)
         similar_examples = retrieve_similar_feedback(db, embedding, n_results=3, exclude_id=feedback.id)
     except Exception:
         logger.exception(
@@ -38,7 +52,7 @@ def _process_feedback_submission(db: Session, raw_text: str) -> Feedback:
         )
 
     try:
-        classification = classify_feedback(raw_text, similar_examples=similar_examples)
+        classification = classify_feedback(payload.raw_text, similar_examples=similar_examples)
     except Exception:
         logger.exception("AI classification failed for feedback %s; leaving unclassified", feedback.id)
     else:
@@ -69,12 +83,12 @@ def _process_feedback_submission(db: Session, raw_text: str) -> Feedback:
 
 @router.post("/feedback", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
 def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> FeedbackRead:
-    return _process_feedback_submission(db, payload.raw_text)
+    return _process_feedback_submission(db, payload)
 
 
 @router.post("/bulk-upload", response_model=list[FeedbackRead], status_code=status.HTTP_201_CREATED)
 def bulk_upload_feedback(payload: BulkFeedbackCreate, db: Session = Depends(get_db)) -> list[FeedbackRead]:
-    return [_process_feedback_submission(db, item.raw_text) for item in payload.items]
+    return [_process_feedback_submission(db, item) for item in payload.items]
 
 
 @router.get("/feedback", response_model=list[FeedbackRead])

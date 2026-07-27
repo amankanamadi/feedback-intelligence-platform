@@ -244,3 +244,74 @@ def test_bulk_upload_continues_past_individual_classification_failures(client, m
     assert body[0]["main_category"] == "Incident"
     assert body[1]["main_category"] is None  # failed item still stored, left unclassified
     assert body[2]["main_category"] == "Incident"
+
+
+def test_submit_feedback_with_full_metadata_round_trips(client, mock_ai):
+    response = client.post(
+        "/feedback",
+        json={
+            "raw_text": "Can't upload invoices after today's update.",
+            "user_id": "user-42",
+            "name": "Jordan Lee",
+            "email": "jordan@example.com",
+            "source": "Mobile App",
+            "product": "Invoicing",
+            "module": "Uploads",
+            "version": "3.2.1",
+            "device": "iPhone 15",
+            "browser": "Safari",
+            "platform": "iOS",
+            "region": "US-East",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["user_id"] == "user-42"
+    assert body["name"] == "Jordan Lee"
+    assert body["email"] == "jordan@example.com"
+    assert body["source"] == "Mobile App"
+    assert body["product"] == "Invoicing"
+    assert body["module"] == "Uploads"
+    assert body["version"] == "3.2.1"
+    assert body["device"] == "iPhone 15"
+    assert body["browser"] == "Safari"
+    assert body["platform"] == "iOS"
+    assert body["region"] == "US-East"
+
+
+def test_submit_feedback_without_metadata_defaults_to_null(client, mock_ai):
+    response = client.post("/feedback", json={"raw_text": "Just the text."})
+
+    assert response.status_code == 201
+    body = response.json()
+    for field in ["user_id", "name", "email", "source", "product", "module", "version", "device", "browser", "platform", "region"]:
+        assert body[field] is None
+
+
+def test_submit_feedback_rejects_invalid_source_value(client, mock_ai):
+    response = client.post(
+        "/feedback", json={"raw_text": "Anything at all.", "source": "Carrier Pigeon"}
+    )
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_bulk_upload_captures_metadata_independently_per_item(client, mock_ai):
+    response = client.post(
+        "/bulk-upload",
+        json={
+            "items": [
+                {"raw_text": "First item.", "source": "Email", "product": "Invoicing"},
+                {"raw_text": "Second item."},
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body[0]["source"] == "Email"
+    assert body[0]["product"] == "Invoicing"
+    assert body[1]["source"] is None
+    assert body[1]["product"] is None

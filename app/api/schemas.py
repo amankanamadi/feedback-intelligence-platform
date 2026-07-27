@@ -7,6 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.database.models import FeedbackSource
+
 # Built from bare codepoints (via chr()) rather than embedding the actual
 # invisible/control characters in this source file, which would be both
 # unreadable and easy to silently corrupt in an editor.
@@ -27,9 +29,35 @@ _DANGEROUS_CHARS = re.compile(
 # feedback does, but a cheap way to waste tokens/cost on every AI call.
 _EXCESSIVE_REPETITION = re.compile(r"(.)\1{39,}")
 
+# Submission metadata fields - optional, free-text, no fixed vocabulary
+# (unlike `source`, which is a closed channel enum).
+_METADATA_TEXT_FIELDS = (
+    "user_id",
+    "name",
+    "email",
+    "product",
+    "module",
+    "version",
+    "device",
+    "browser",
+    "platform",
+    "region",
+)
+
 
 class FeedbackCreate(BaseModel):
     raw_text: str = Field(min_length=1, max_length=10_000)
+    user_id: Optional[str] = Field(None, max_length=50)
+    name: Optional[str] = Field(None, max_length=200)
+    email: Optional[str] = Field(None, max_length=320)  # RFC 5321 max mailbox length
+    source: Optional[FeedbackSource] = None
+    product: Optional[str] = Field(None, max_length=100)
+    module: Optional[str] = Field(None, max_length=100)
+    version: Optional[str] = Field(None, max_length=50)
+    device: Optional[str] = Field(None, max_length=100)
+    browser: Optional[str] = Field(None, max_length=100)
+    platform: Optional[str] = Field(None, max_length=100)
+    region: Optional[str] = Field(None, max_length=100)
 
     @field_validator("raw_text")
     @classmethod
@@ -40,6 +68,14 @@ class FeedbackCreate(BaseModel):
         if _EXCESSIVE_REPETITION.search(cleaned):
             raise ValueError("raw_text contains excessive repeated characters")
         return cleaned
+
+    @field_validator(*_METADATA_TEXT_FIELDS, mode="before")
+    @classmethod
+    def _sanitize_metadata_text(cls, v):
+        if v is None:
+            return v
+        cleaned = _DANGEROUS_CHARS.sub("", v).strip()
+        return cleaned or None
 
 
 class BulkFeedbackCreate(BaseModel):
@@ -63,10 +99,23 @@ class FeedbackRead(BaseModel):
     confidence: Optional[int] = None
     summary: Optional[str] = None
     themes: list[str] = []
+    user_id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    source: Optional[str] = None
+    product: Optional[str] = None
+    module: Optional[str] = None
+    version: Optional[str] = None
+    device: Optional[str] = None
+    browser: Optional[str] = None
+    platform: Optional[str] = None
+    region: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
-    @field_validator("main_category", "sub_category", "sentiment", "priority", mode="before")
+    @field_validator(
+        "main_category", "sub_category", "sentiment", "priority", "source", mode="before"
+    )
     @classmethod
     def _enum_to_value(cls, v):
         return v.value if isinstance(v, enum.Enum) else v

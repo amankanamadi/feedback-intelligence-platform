@@ -56,6 +56,17 @@ class Priority(str, enum.Enum):
     CRITICAL = "Critical"
 
 
+class FeedbackSource(str, enum.Enum):
+    WEB_FORM = "Web Form"
+    IN_APP_WIDGET = "In-App Widget"
+    MOBILE_APP = "Mobile App"
+    EMAIL = "Email"
+    API = "API"
+    SURVEY = "Survey"
+    CHATBOT = "Chatbot"
+    QR_CODE = "QR Code"
+
+
 # Association table for the many-to-many Feedback <-> Theme relationship.
 feedback_themes = Table(
     "feedback_themes",
@@ -82,6 +93,20 @@ class Feedback(Base):
     confidence: Mapped[Optional[int]]
     summary: Mapped[Optional[str]]
     embedding: Mapped[Optional[list[float]]] = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=True)
+
+    # Submission metadata - who/where/how the feedback came in. Optional
+    # since not every channel can supply every field.
+    user_id: Mapped[Optional[str]]
+    name: Mapped[Optional[str]]
+    email: Mapped[Optional[str]]
+    source: Mapped[Optional[FeedbackSource]] = mapped_column(Enum(FeedbackSource, name="feedback_source_enum"))
+    product: Mapped[Optional[str]]
+    module: Mapped[Optional[str]]
+    version: Mapped[Optional[str]]
+    device: Mapped[Optional[str]]
+    browser: Mapped[Optional[str]]
+    platform: Mapped[Optional[str]]
+    region: Mapped[Optional[str]]
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
