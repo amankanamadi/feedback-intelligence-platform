@@ -11,3 +11,4 @@ pgvector==0.4.2
 pytest==8.3.4
 httpx==0.28.1
 python-multipart==0.0.20
+fpdf2==2.8.4

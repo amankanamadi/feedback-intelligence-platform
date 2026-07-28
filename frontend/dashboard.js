@@ -193,7 +193,7 @@ async function loadThemes() {
   renderThemeChart(themes);
 }
 
-function buildFeedbackQuery() {
+function buildFeedbackFilterParams() {
   const params = new URLSearchParams();
   const category = document.getElementById("filter-category").value;
   const sentiment = document.getElementById("filter-sentiment").value;
@@ -201,6 +201,11 @@ function buildFeedbackQuery() {
   if (category) params.set("main_category", category);
   if (sentiment) params.set("sentiment", sentiment);
   if (search) params.set("search", search);
+  return params;
+}
+
+function buildFeedbackQuery() {
+  const params = buildFeedbackFilterParams();
   params.set("limit", "50");
   return params.toString();
 }
@@ -293,6 +298,60 @@ async function refreshAll() {
   await Promise.all([loadAnalytics(), loadThemes(), loadFeedbackTable()]);
 }
 
+function renderBulletList(label, items) {
+  if (!items || !items.length) return "";
+  const lis = items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  return `<p class="mb-1"><strong>${label}:</strong></p><ul>${lis}</ul>`;
+}
+
+function renderExcerptList(label, excerpts) {
+  if (!excerpts || !excerpts.length) return "";
+  const lis = excerpts
+    .map((e) => {
+      const tags = [e.main_category, e.sentiment, e.priority].filter(Boolean).join(" / ");
+      return `<li>${tags ? `<span class="text-muted small">[${tags}]</span> ` : ""}${escapeHtml(e.raw_text)}</li>`;
+    })
+    .join("");
+  return `<p class="mb-1"><strong>${label}:</strong></p><ul>${lis}</ul>`;
+}
+
+async function loadWeeklyReport() {
+  const btn = document.getElementById("weekly-report-btn");
+  const statusEl = document.getElementById("weekly-report-status");
+  const bodyEl = document.getElementById("weekly-report-body");
+
+  btn.disabled = true;
+  btn.textContent = "Generating...";
+  statusEl.textContent = "";
+  bodyEl.innerHTML = "";
+
+  try {
+    const report = await fetchJSON("/reports/weekly");
+    const start = new Date(report.period_start).toLocaleDateString();
+    const end = new Date(report.period_end).toLocaleDateString();
+    bodyEl.innerHTML = `
+      <p class="text-muted small">Period: ${start} - ${end}</p>
+      <p class="text-muted small">
+        ${report.metrics.total_feedback} feedback items ·
+        ${report.metrics.positive_pct}% positive ·
+        ${report.metrics.neutral_pct}% neutral ·
+        ${report.metrics.negative_pct}% negative
+      </p>
+      <p>${escapeHtml(report.executive_summary)}</p>
+      ${renderBulletList("Key Wins", report.key_wins)}
+      ${renderBulletList("Key Concerns", report.key_concerns)}
+      ${renderBulletList("Recommended Actions", report.recommended_actions)}
+      ${renderExcerptList("Top Concerns", report.top_concerns)}
+      ${renderExcerptList("Positive Highlights", report.positive_highlights)}
+    `;
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Generate Report";
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   feedbackModal = new bootstrap.Modal(document.getElementById("feedback-modal"));
 
@@ -304,6 +363,17 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("filter-category").addEventListener("change", loadFeedbackTable);
   document.getElementById("filter-sentiment").addEventListener("change", loadFeedbackTable);
   document.getElementById("search-input").addEventListener("input", debounce(loadFeedbackTable, 300));
+
+  document.getElementById("export-csv-btn").addEventListener("click", () => {
+    window.location.href = `/feedback/export/csv?${buildFeedbackFilterParams().toString()}`;
+  });
+  document.getElementById("export-pdf-btn").addEventListener("click", () => {
+    window.location.href = `/feedback/export/pdf?${buildFeedbackFilterParams().toString()}`;
+  });
+
+  // Not part of refreshAll() - this triggers a real LLM call, so it only
+  // runs on an explicit click, never on page load or routine refresh.
+  document.getElementById("weekly-report-btn").addEventListener("click", loadWeeklyReport);
 
   document.getElementById("feedback-form").addEventListener("submit", async (event) => {
     event.preventDefault();

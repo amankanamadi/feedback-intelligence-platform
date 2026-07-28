@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     attachment_max_size_bytes: int = 5_000_000
     attachment_max_files_per_upload: int = 5
 
+    # Safety cap on export size, not a real limit at current data scale.
+    feedback_export_max_rows: int = 10_000
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
