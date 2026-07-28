@@ -69,6 +69,15 @@
           <div class="col-md-4">
             <input type="email" id="feedback-email" class="form-control" placeholder="Email (optional)">
           </div>
+          <div class="col-md-4">
+            <input
+              type="file"
+              id="feedback-attachments"
+              class="form-control"
+              multiple
+              accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.log,.csv"
+            >
+          </div>
         </div>
         <div class="d-flex align-items-center gap-2">
           <button class="btn btn-primary" type="submit">Submit</button>
@@ -76,6 +85,15 @@
         </div>
       </form>
       <div id="feedback-form-status" class="form-text"></div>
+    </div>
+
+    <div class="card p-3 mb-4">
+      <h6>Bulk Upload (CSV/JSON)</h6>
+      <form id="bulk-upload-form" class="d-flex gap-2">
+        <input type="file" id="bulk-upload-file" class="form-control" accept=".csv,.json" required>
+        <button class="btn btn-secondary" type="submit">Upload</button>
+      </form>
+      <div id="bulk-upload-status" class="form-text"></div>
     </div>
 
     <div class="card p-3 mb-3">

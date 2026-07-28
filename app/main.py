@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
 
 from app.api.analytics import router as analytics_router
+from app.api.attachments import router as attachments_router
 from app.api.feedback import router as feedback_router
 from app.api.reports import router as reports_router
 from app.core.config import Settings, get_settings
@@ -23,6 +24,7 @@ app = FastAPI(title="AI Customer Feedback Intelligence Platform")
 app.include_router(feedback_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
+app.include_router(attachments_router)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 

@@ -339,3 +339,68 @@ def test_list_feedback_filters_by_product_partial_match(client, mock_ai):
     body = response.json()
     assert len(body) == 1
     assert body[0]["raw_text"] == "Invoicing bug."
+
+
+def test_bulk_upload_file_accepts_csv(client, mock_ai):
+    csv_content = b"raw_text,source\nFirst item.,Web Form\nSecond item.,Email\n"
+
+    response = client.post(
+        "/bulk-upload/file",
+        files={"file": ("feedback.csv", csv_content, "text/csv")},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert [item["raw_text"] for item in body] == ["First item.", "Second item."]
+    assert body[1]["source"] == "Email"
+    assert mock_ai["classify"].call_count == 2
+
+
+def test_bulk_upload_file_accepts_json(client, mock_ai):
+    json_content = b'[{"raw_text": "First item."}, {"raw_text": "Second item."}]'
+
+    response = client.post(
+        "/bulk-upload/file",
+        files={"file": ("feedback.json", json_content, "application/json")},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert [item["raw_text"] for item in body] == ["First item.", "Second item."]
+
+
+def test_bulk_upload_file_rejects_batch_exceeding_cap(client, mock_ai):
+    rows = "\n".join(f"Feedback {i}" for i in range(26))
+    csv_content = f"raw_text\n{rows}\n".encode()
+
+    response = client.post(
+        "/bulk-upload/file",
+        files={"file": ("feedback.csv", csv_content, "text/csv")},
+    )
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_bulk_upload_file_rejects_unsupported_extension(client, mock_ai):
+    response = client.post(
+        "/bulk-upload/file",
+        files={"file": ("feedback.txt", b"raw_text\nsomething\n", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_bulk_upload_file_rejects_oversized_file(client, mock_ai, monkeypatch):
+    import app.api.feedback as feedback_module
+
+    monkeypatch.setattr(feedback_module.get_settings(), "bulk_upload_max_file_bytes", 10)
+
+    response = client.post(
+        "/bulk-upload/file",
+        files={"file": ("feedback.csv", b"raw_text\nsomething much longer than 10 bytes\n", "text/csv")},
+    )
+
+    assert response.status_code == 413
+    mock_ai["classify"].assert_not_called()

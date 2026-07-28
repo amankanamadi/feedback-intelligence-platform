@@ -1,11 +1,14 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.ai.classification import classify_feedback
+from app.api.bulk_upload_parsing import parse_bulk_upload_file
 from app.api.schemas import BulkFeedbackCreate, FeedbackCreate, FeedbackRead
+from app.core.config import get_settings
 from app.database import crud
 from app.database.models import Feedback, FeedbackSource, MainCategory, Sentiment
 from app.database.session import get_db
@@ -88,6 +91,34 @@ def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
 
 @router.post("/bulk-upload", response_model=list[FeedbackRead], status_code=status.HTTP_201_CREATED)
 def bulk_upload_feedback(payload: BulkFeedbackCreate, db: Session = Depends(get_db)) -> list[FeedbackRead]:
+    return [_process_feedback_submission(db, item) for item in payload.items]
+
+
+@router.post("/bulk-upload/file", response_model=list[FeedbackRead], status_code=status.HTTP_201_CREATED)
+async def bulk_upload_feedback_file(
+    file: UploadFile = File(...), db: Session = Depends(get_db)
+) -> list[FeedbackRead]:
+    settings = get_settings()
+    raw_bytes = await file.read()
+    if len(raw_bytes) > settings.bulk_upload_max_file_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Uploaded file exceeds the {settings.bulk_upload_max_file_bytes} byte limit.",
+        )
+
+    try:
+        rows = parse_bulk_upload_file(file.filename, raw_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    try:
+        payload = BulkFeedbackCreate(items=rows)
+    except ValidationError as exc:
+        # Only string-safe fields - exc.errors() can carry a raw exception
+        # object in "ctx" for custom validators, which isn't JSON-encodable.
+        detail = [{"loc": err["loc"], "msg": err["msg"], "type": err["type"]} for err in exc.errors()]
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail) from exc
+
     return [_process_feedback_submission(db, item) for item in payload.items]
 
 

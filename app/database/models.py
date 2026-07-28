@@ -116,6 +116,9 @@ class Feedback(Base):
     themes: Mapped[list["Theme"]] = relationship(
         secondary=feedback_themes, back_populates="feedback_items"
     )
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="feedback", cascade="all, delete-orphan"
+    )
 
 
 class Theme(Base):
@@ -127,3 +130,19 @@ class Theme(Base):
     feedback_items: Mapped[list["Feedback"]] = relationship(
         secondary=feedback_themes, back_populates="themes"
     )
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    feedback_id: Mapped[int] = mapped_column(ForeignKey("feedback.id", ondelete="CASCADE"))
+    filename: Mapped[str]
+    content_type: Mapped[str]
+    size_bytes: Mapped[int]
+    # Server-generated relative path under settings.attachments_dir - never
+    # built from the client-supplied filename, to avoid path traversal.
+    storage_path: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    feedback: Mapped["Feedback"] = relationship(back_populates="attachments")

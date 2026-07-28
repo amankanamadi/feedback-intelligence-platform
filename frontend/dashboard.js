@@ -261,8 +261,32 @@ async function showFeedbackDetail(id) {
     <p><strong>Region:</strong> ${escapeHtml(f.region) || "-"}</p>
     <p><strong>Device / Browser / Platform:</strong> ${escapeHtml(f.device) || "-"} / ${escapeHtml(f.browser) || "-"} / ${escapeHtml(f.platform) || "-"}</p>
     <p class="text-muted small mb-0">Created: ${new Date(f.created_at).toLocaleString()}</p>
+    ${renderAttachmentsList(f.attachments)}
   `;
   feedbackModal.show();
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderAttachmentsList(attachments) {
+  if (!attachments || !attachments.length) {
+    return "";
+  }
+  const items = attachments
+    .map(
+      (a) => `
+        <li>
+          <a href="/attachments/${a.id}/download" target="_blank" rel="noopener">${escapeHtml(a.filename)}</a>
+          <span class="text-muted small">(${formatFileSize(a.size_bytes)})</span>
+        </li>
+      `
+    )
+    .join("");
+  return `<hr><p class="mb-1"><strong>Attachments:</strong></p><ul class="mb-0">${items}</ul>`;
 }
 
 async function refreshAll() {
@@ -307,6 +331,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const userId = deriveUserId(name, email);
     if (userId) payload.user_id = userId;
 
+    const attachmentsInput = document.getElementById("feedback-attachments");
+    const attachmentFiles = attachmentsInput.files;
+
     try {
       const res = await fetch("/feedback", {
         method: "POST",
@@ -314,6 +341,20 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Submit failed (${res.status})`);
+      const created = await res.json();
+
+      if (attachmentFiles.length) {
+        const formData = new FormData();
+        for (const file of attachmentFiles) {
+          formData.append("files", file);
+        }
+        const attachRes = await fetch(`/feedback/${created.id}/attachments`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!attachRes.ok) throw new Error(`Attachment upload failed (${attachRes.status})`);
+      }
+
       event.target.reset();
       statusEl.textContent = "Feedback submitted and classified.";
       await refreshAll();
@@ -322,6 +363,35 @@ document.addEventListener("DOMContentLoaded", () => {
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Submit";
+    }
+  });
+
+  document.getElementById("bulk-upload-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const fileInput = document.getElementById("bulk-upload-file");
+    const statusEl = document.getElementById("bulk-upload-status");
+    if (!fileInput.files.length) return;
+
+    const submitBtn = event.target.querySelector("button[type=submit]");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Uploading...";
+    statusEl.textContent = "";
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+
+    try {
+      const res = await fetch("/bulk-upload/file", { method: "POST", body: formData });
+      const body = await res.json();
+      if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail));
+      event.target.reset();
+      statusEl.textContent = `Uploaded and classified ${body.length} feedback item(s).`;
+      await refreshAll();
+    } catch (err) {
+      statusEl.textContent = `Error: ${err.message}`;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Upload";
     }
   });
 

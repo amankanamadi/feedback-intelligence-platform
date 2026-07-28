@@ -87,6 +87,16 @@ class BulkFeedbackCreate(BaseModel):
     items: list[FeedbackCreate] = Field(min_length=1, max_length=25)
 
 
+class AttachmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    content_type: str
+    size_bytes: int
+    created_at: datetime
+
+
 class FeedbackRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,6 +109,7 @@ class FeedbackRead(BaseModel):
     confidence: Optional[int] = None
     summary: Optional[str] = None
     themes: list[str] = []
+    attachments: list[AttachmentRead] = []
     user_id: Optional[str] = None
     name: Optional[str] = None
     email: Optional[str] = None

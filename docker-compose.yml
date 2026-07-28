@@ -31,6 +31,9 @@ services:
     environment:
       DEBUG: "false"
       DATABASE_URL: postgresql://${POSTGRES_USER:-feedback_app}:${POSTGRES_PASSWORD:-feedback_app_dev_pw}@db:5432/${POSTGRES_DB:-feedback_intelligence}
+      ATTACHMENTS_DIR: /app/attachments
+    volumes:
+      - attachments_data:/app/attachments
     command: >
       sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}"
     ports:
@@ -43,3 +46,4 @@ services:
 
 volumes:
   postgres_data:
+  attachments_data:

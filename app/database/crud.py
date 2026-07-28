@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.models import (
+    Attachment,
     Feedback,
     FeedbackSource,
     MainCategory,
@@ -156,3 +157,29 @@ def list_feedback(
         stmt = stmt.where(Feedback.product.ilike(f"%{product}%"))
     stmt = stmt.offset(skip).limit(limit)
     return list(db.scalars(stmt))
+
+
+def create_attachment(
+    db: Session,
+    feedback_id: int,
+    *,
+    filename: str,
+    content_type: str,
+    size_bytes: int,
+    storage_path: str,
+) -> Attachment:
+    attachment = Attachment(
+        feedback_id=feedback_id,
+        filename=filename,
+        content_type=content_type,
+        size_bytes=size_bytes,
+        storage_path=storage_path,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
+def get_attachment(db: Session, attachment_id: int) -> Attachment | None:
+    return db.get(Attachment, attachment_id)
