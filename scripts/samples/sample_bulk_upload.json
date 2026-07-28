@@ -1,0 +1,30 @@
+[
+  {
+    "raw_text": "The mobile app logs me out randomly, sometimes mid-session while I'm entering data.",
+    "source": "Mobile App",
+    "product": "Onboarding",
+    "module": "Uploads",
+    "version": "3.1.0",
+    "region": "US-West"
+  },
+  {
+    "raw_text": "It would be great if search results could be filtered by date range."
+  },
+  {
+    "raw_text": "The new checkout flow is much smoother than before, nice work!",
+    "source": "In-App Widget",
+    "product": "Payments"
+  },
+  {
+    "raw_text": "Getting a 500 error when I try to integrate the webhook with our Slack channel.",
+    "source": "API",
+    "product": "Analytics",
+    "module": "Notifications",
+    "version": "2.0.0"
+  },
+  {
+    "raw_text": "Is there a way to see historical usage data older than 90 days?",
+    "source": "QR Code",
+    "region": "APAC"
+  }
+]

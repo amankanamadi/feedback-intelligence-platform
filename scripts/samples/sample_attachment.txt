@@ -1,0 +1,8 @@
+2026-07-28 09:14:02 ERROR  ExportService  Failed to render report as PDF
+2026-07-28 09:14:02 ERROR  ExportService  java.lang.NullPointerException: template reference is null
+	at com.feedbackplatform.export.PdfRenderer.render(PdfRenderer.java:88)
+	at com.feedbackplatform.export.ExportService.export(ExportService.java:41)
+	at com.feedbackplatform.api.ReportController.downloadPdf(ReportController.java:67)
+2026-07-28 09:14:02 INFO   ExportService  Retrying export (attempt 2 of 3)
+2026-07-28 09:14:03 ERROR  ExportService  Retry failed with same error
+2026-07-28 09:14:03 INFO   ExportService  Export marked as failed, notifying user

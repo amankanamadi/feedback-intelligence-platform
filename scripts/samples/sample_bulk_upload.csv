@@ -1,0 +1,6 @@
+raw_text,source,product,module,version,region
+"The export button crashes every time I try to download a report as PDF.",Web Form,Reporting,Export,2.3.1,US-East
+"Please add a dark mode option to the settings page.",Chatbot,Dashboard,Settings,,EU-West
+"I was billed twice for my subscription this month, please refund the extra charge.",Email,Payments,Checkout,1.4.2,APAC
+"Really appreciate how fast the support team resolved my login issue yesterday!",Survey,,,,
+"Could you add an API endpoint to bulk-export contacts as CSV?",API,Invoicing,,4.0.0-beta,LATAM
