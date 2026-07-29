@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useLogoutMutation } from "@/hooks/use-logout";
 
-export function AdminTopbar() {
+export function AppTopbar() {
   const router = useRouter();
   const { user } = useAuth();
   const logoutMutation = useLogoutMutation();
 
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
-      onSuccess: () => router.push("/admin-login"),
+      onSuccess: () => router.push("/login"),
     });
   };
 
@@ -24,7 +24,7 @@ export function AdminTopbar() {
         {user && (
           <div className="text-right">
             <p className="text-sm font-medium text-foreground">{user.full_name ?? user.email}</p>
-            <p className="text-xs text-muted-foreground">Administrator</p>
+            <p className="text-xs text-muted-foreground">{user.role === "ADMIN" ? "Administrator" : "Member"}</p>
           </div>
         )}
         <Button variant="outline" size="sm" onClick={handleLogout} isLoading={logoutMutation.isPending}>

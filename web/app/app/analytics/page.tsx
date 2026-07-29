@@ -1,7 +1,7 @@
 import { BarChart3 } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 
-export default function AdminAnalyticsPage() {
+export default function AnalyticsPage() {
   return (
     <EmptyState
       icon={<BarChart3 className="size-10" aria-hidden="true" />}

@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/shared/PasswordInput";
 import { useLoginMutation } from "@/hooks/use-login";
 import { isApiError } from "@/lib/auth";
-import type { Role } from "@/types/auth";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email address."),
@@ -23,10 +22,10 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-const ROLE_HOME: Record<Role, string> = {
-  USER: "/portal",
-  ADMIN: "/admin",
-};
+// Both "Login to Give Feedback" and "Admin Login" land here regardless of
+// role - one app, not two portals. Role only controls which nav items and
+// pages are reachable once inside.
+const APP_HOME = "/app";
 
 export function AuthForm(props: { forgotPasswordHref: string }) {
   return (
@@ -54,9 +53,9 @@ function AuthFormInner({ forgotPasswordHref }: { forgotPasswordHref: string }) {
     loginMutation.mutate(
       { email: values.email, password: values.password, remember_me: values.rememberMe },
       {
-        onSuccess: (user) => {
+        onSuccess: () => {
           const next = searchParams.get("next");
-          router.push(next ?? ROLE_HOME[user.role]);
+          router.push(next ?? APP_HOME);
         },
         onError: (error) => {
           toast.error(isApiError(error) ? error.message : "Something went wrong. Please try again.");

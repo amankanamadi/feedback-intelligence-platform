@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div data-portal="user" className="flex w-full flex-col items-center gap-6">
+    <div className="flex w-full flex-col items-center gap-6">
       <AuthCard
         title="Reset your password"
         subtitle="Enter your email and we'll help you get back into your account."

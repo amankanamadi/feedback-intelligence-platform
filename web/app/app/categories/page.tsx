@@ -1,7 +1,7 @@
 import { Tags } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 
-export default function AdminCategoriesPage() {
+export default function CategoriesPage() {
   return (
     <EmptyState
       icon={<Tags className="size-10" aria-hidden="true" />}

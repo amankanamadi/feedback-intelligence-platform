@@ -1,7 +1,7 @@
 import { Settings } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 
-export default function AdminSettingsPage() {
+export default function SettingsPage() {
   return (
     <EmptyState
       icon={<Settings className="size-10" aria-hidden="true" />}

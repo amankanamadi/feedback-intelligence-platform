@@ -16,25 +16,30 @@ is what carries the session.
 3. `npm install`
 4. `npm run dev` and open [http://localhost:3000](http://localhost:3000).
 
-## Route protection
+## One app, role-adaptive - not two portals
+
+There are two distinct login entry points ("Login to Give Feedback" and
+"Admin Login" - different copy/branding, both call the same
+`POST /auth/login`), but everyone lands in the **same** app at `/app/*`
+afterward. Role only controls which nav items and pages are visible/
+reachable (see `components/app-shell/AppSidebar.tsx`'s `adminOnly` group
+flag) - there's no separate route tree or visual theme per role.
 
 `proxy.ts` (Next.js 16 renamed `middleware.ts` to `proxy.ts`) gates
-`/portal/*` and `/admin/*` by forwarding the incoming cookie to
-`GET /auth/me` on every navigation and redirecting based on the result.
-This is a UX convenience, not the real security boundary - every backend
-route independently enforces its own auth/role checks, since a client-side
+`/app/*` by forwarding the incoming cookie to `GET /auth/me` on every
+navigation, and additionally redirects a non-admin away from the
+admin-only sub-paths listed in `ADMIN_ONLY_SEGMENTS`. This is a UX
+convenience, not the real security boundary - every backend route
+independently enforces its own auth/role checks, since a client-side
 redirect can always be bypassed by calling the API directly.
 
 ## Structure
 
 - `app/(public)/` - login, admin-login, signup, forgot/reset password
-- `app/(user)/portal/` - customer-facing feedback flow (USER role)
-- `app/(admin)/admin/` - management console (ADMIN role)
+- `app/app/` - the one authenticated app (feedback, profile, and the
+  admin-only analytics/reports/administration pages)
 - `lib/` - API client, auth context, query client, formatting helpers
 - `hooks/` - TanStack Query mutations/queries
 - `components/ui/` - small hand-rolled primitives (Radix + Tailwind, no
   external component-library CLI dependency)
-- `components/shared/`, `components/user-portal/`, `components/admin-portal/`
-
-Two visual themes share the same components via a `data-portal="user" |
-"admin"` attribute (see `app/globals.css`) rather than forking styles.
+- `components/shared/`, `components/app-shell/`

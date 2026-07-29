@@ -9,14 +9,27 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 type Role = "USER" | "ADMIN";
 type Me = { role: Role } | null;
 
-const ROLE_HOME: Record<Role, string> = {
-  USER: "/portal",
-  ADMIN: "/admin",
-};
+// Both login entry points ("Login to Give Feedback" and "Admin Login")
+// land here regardless of role - one app, not two portals.
+const APP_HOME = "/app";
 
 // Pages a logged-in visitor shouldn't see again - hitting one redirects
-// them straight to their portal instead.
+// them straight into the app instead.
 const AUTH_ENTRY_PAGES = new Set(["/login", "/admin-login", "/signup"]);
+
+// Sub-paths under /app that only render/apply for ADMIN - a non-admin
+// hitting one directly by URL is bounced back to /app. Defense-in-depth
+// on top of the backend's own 403s and the sidebar simply not rendering
+// the link for a USER.
+const ADMIN_ONLY_SEGMENTS = [
+  "/app/analytics",
+  "/app/reports",
+  "/app/users",
+  "/app/categories",
+  "/app/ai-config",
+  "/app/settings",
+  "/app/audit-logs",
+];
 
 async function fetchMe(cookieHeader: string | null): Promise<Me> {
   if (!cookieHeader) return null;
@@ -36,10 +49,8 @@ async function fetchMe(cookieHeader: string | null): Promise<Me> {
 }
 
 // Plain `pathname.startsWith("/admin")` would also match "/admin-login" -
-// a public auth page, not a protected one - tripping this into an
-// unauthenticated-redirect-to-itself loop. Require a following "/" (or
-// an exact match) so sibling routes like "/admin-login" don't count as
-// "under" "/admin".
+// a public auth page, not a protected one. Require a following "/" (or
+// an exact match) so sibling routes don't count as "under" a segment.
 function isUnderSegment(pathname: string, segment: string): boolean {
   return pathname === segment || pathname.startsWith(`${segment}/`);
 }
@@ -49,32 +60,29 @@ export async function proxy(request: NextRequest) {
   const me = await fetchMe(request.headers.get("cookie"));
 
   if (pathname === "/") {
-    return NextResponse.redirect(new URL(me ? ROLE_HOME[me.role] : "/login", request.url));
+    return NextResponse.redirect(new URL(me ? APP_HOME : "/login", request.url));
   }
 
   if (AUTH_ENTRY_PAGES.has(pathname) && me) {
-    return NextResponse.redirect(new URL(ROLE_HOME[me.role], request.url));
+    return NextResponse.redirect(new URL(APP_HOME, request.url));
   }
 
-  if (isUnderSegment(pathname, "/portal")) {
-    if (!me) return redirectToLogin(request, "/login");
-    if (me.role !== "USER") return NextResponse.redirect(new URL(ROLE_HOME[me.role], request.url));
-  }
-
-  if (isUnderSegment(pathname, "/admin")) {
-    if (!me) return redirectToLogin(request, "/admin-login");
-    if (me.role !== "ADMIN") return NextResponse.redirect(new URL(ROLE_HOME[me.role], request.url));
+  if (isUnderSegment(pathname, "/app")) {
+    if (!me) return redirectToLogin(request);
+    if (ADMIN_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && me.role !== "ADMIN") {
+      return NextResponse.redirect(new URL(APP_HOME, request.url));
+    }
   }
 
   return NextResponse.next();
 }
 
-function redirectToLogin(request: NextRequest, loginPath: string) {
-  const url = new URL(loginPath, request.url);
+function redirectToLogin(request: NextRequest) {
+  const url = new URL("/login", request.url);
   url.searchParams.set("next", request.nextUrl.pathname);
   return NextResponse.redirect(url);
 }
 
 export const config = {
-  matcher: ["/", "/login", "/admin-login", "/signup", "/portal/:path*", "/admin/:path*"],
+  matcher: ["/", "/login", "/admin-login", "/signup", "/app/:path*"],
 };

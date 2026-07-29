@@ -58,7 +58,7 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div data-portal="user" className="flex w-full flex-col items-center gap-6">
+    <div className="flex w-full flex-col items-center gap-6">
       <AuthCard title="Set a new password" subtitle="Choose a strong password for your account.">
         {!token ? (
           <p className="text-center text-sm text-destructive">

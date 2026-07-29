@@ -48,7 +48,7 @@ export default function SignupPage() {
       {
         onSuccess: () => {
           toast.success("Account created!");
-          router.push("/portal");
+          router.push("/app");
         },
         onError: (error) => {
           toast.error(isApiError(error) ? error.message : "Something went wrong. Please try again.");
@@ -58,7 +58,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div data-portal="user" className="flex w-full flex-col items-center gap-6">
+    <div className="flex w-full flex-col items-center gap-6">
       <div className="flex items-center gap-2 text-primary">
         <MessageSquareHeart className="size-8" aria-hidden="true" />
         <span className="text-lg font-semibold text-foreground">Feedback Intelligence</span>

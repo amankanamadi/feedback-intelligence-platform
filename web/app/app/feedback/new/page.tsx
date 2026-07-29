@@ -7,7 +7,6 @@ export default function NewFeedbackPage() {
       icon={<MessageSquarePlus className="size-10" aria-hidden="true" />}
       title="Feedback submission form coming soon"
       description="This page will let you submit new feedback and see an instant acknowledgement."
-      className="flex-1"
     />
   );
 }

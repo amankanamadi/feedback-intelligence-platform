@@ -1,7 +1,7 @@
 import { Users } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 
-export default function AdminUsersPage() {
+export default function UsersPage() {
   return (
     <EmptyState
       icon={<Users className="size-10" aria-hidden="true" />}
