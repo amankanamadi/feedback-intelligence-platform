@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Inbox, Search } from "lucide-react";
+import { BulkUploadForm } from "@/components/admin/BulkUploadForm";
+import { ExportButtons } from "@/components/admin/ExportButtons";
 import { DataState } from "@/components/shared/DataState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { TableSkeleton } from "@/components/shared/LoadingSkeletons";
@@ -19,50 +21,56 @@ export function FeedbackListAdmin() {
   const [sentiment, setSentiment] = useState<Sentiment | "">("");
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  const query = useFeedbackList({
+  const filters = {
     limit: 200,
     search: debouncedSearch || undefined,
     main_category: mainCategory || undefined,
     sentiment: sentiment || undefined,
-  });
+  };
+  const query = useFeedbackList(filters);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-64">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input
-            placeholder="Search feedback..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              placeholder="Search feedback..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={mainCategory}
+            onChange={(e) => setMainCategory(e.target.value as MainCategory | "")}
+            className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+          >
+            <option value="">All categories</option>
+            {MAIN_CATEGORY_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sentiment}
+            onChange={(e) => setSentiment(e.target.value as Sentiment | "")}
+            className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+          >
+            <option value="">All sentiment</option>
+            {SENTIMENT_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </div>
-        <select
-          value={mainCategory}
-          onChange={(e) => setMainCategory(e.target.value as MainCategory | "")}
-          className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
-        >
-          <option value="">All categories</option>
-          {MAIN_CATEGORY_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sentiment}
-          onChange={(e) => setSentiment(e.target.value as Sentiment | "")}
-          className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
-        >
-          <option value="">All sentiment</option>
-          {SENTIMENT_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+        <ExportButtons filters={filters} />
       </div>
+
+      <BulkUploadForm />
 
       <DataState
         query={query}
