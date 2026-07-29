@@ -33,7 +33,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _set_auth_cookies(response: Response, user: User, settings: Settings) -> None:
+def _set_auth_cookies(response: Response, user: User, settings: Settings, *, persistent: bool = True) -> None:
+    """`persistent=False` (an unchecked "Remember me") makes the refresh
+    cookie a session cookie - no Max-Age, so the browser drops it on
+    close, ending the session even though the token itself would
+    otherwise still be valid. The access token cookie's short lifetime is
+    a security control, not a persistence one, so it always carries its
+    own Max-Age regardless.
+    """
     access_token = create_access_token(user, settings)
     refresh_token = create_refresh_token(user, settings)
     response.set_cookie(
@@ -53,7 +60,7 @@ def _set_auth_cookies(response: Response, user: User, settings: Settings) -> Non
         secure=settings.cookie_secure,
         samesite="strict",
         domain=settings.cookie_domain,
-        max_age=settings.refresh_token_expire_minutes * 60,
+        max_age=settings.refresh_token_expire_minutes * 60 if persistent else None,
         path="/auth/refresh",
     )
 
@@ -89,7 +96,7 @@ def login(
     logic per portal.
     """
     user = auth_service.authenticate(db, email=payload.email, password=payload.password)
-    _set_auth_cookies(response, user, settings)
+    _set_auth_cookies(response, user, settings, persistent=payload.remember_me)
     return user
 
 
