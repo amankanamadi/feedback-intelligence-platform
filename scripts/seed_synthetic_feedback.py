@@ -5,24 +5,32 @@ Postgres. Run after scripts/generate_synthetic_feedback.py, against a
 running server:
 
     uvicorn app.main:app --reload &
-    python scripts/seed_synthetic_feedback.py
-    python scripts/seed_synthetic_feedback.py --dataset scripts/synthetic_dataset_batch2.json
+    python scripts/seed_synthetic_feedback.py --admin-email admin@example.com --admin-password ...
+    python scripts/seed_synthetic_feedback.py --dataset scripts/synthetic_dataset_batch2.json --admin-email ... --admin-password ...
+
+/feedback now requires authentication, and the classification fields this
+script prints are admin-only in the response - so this needs real admin
+credentials for an already-provisioned admin account (self-service
+signup is always role=USER; there's no bootstrap-an-admin endpoint by
+design). Credentials can also be supplied via the ADMIN_EMAIL/
+ADMIN_PASSWORD env vars instead of flags.
 
 Whatever classification gets stored is the model's own genuine judgment on
 each text - the same as any real submission, not an externally injected
 label.
 
 Every item also gets synthetic submission metadata (source, product,
-module, version, region, name, email, user_id) attached, using the same
-random-pool approach as the dashboard form - reasonable here since this
-whole record is fabricated test data to begin with, unlike backfilling
-metadata onto genuinely real historical feedback.
+module, version, region, name, email, submitter_user_id_legacy) attached,
+using the same random-pool approach as the dashboard form - reasonable
+here since this whole record is fabricated test data to begin with,
+unlike backfilling metadata onto genuinely real historical feedback.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 from pathlib import Path
@@ -51,14 +59,20 @@ def synthetic_metadata() -> dict:
         "region": random.choice(REGIONS),
         "name": f"{first} {last}",
         "email": email,
-        "user_id": email.split("@")[0].replace(".", ""),
+        "submitter_user_id_legacy": email.split("@")[0].replace(".", ""),
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET_PATH)
+    parser.add_argument("--admin-email", default=os.environ.get("ADMIN_EMAIL"))
+    parser.add_argument("--admin-password", default=os.environ.get("ADMIN_PASSWORD"))
     args = parser.parse_args()
+
+    if not args.admin_email or not args.admin_password:
+        print("Admin credentials required: pass --admin-email/--admin-password or set ADMIN_EMAIL/ADMIN_PASSWORD.")
+        sys.exit(1)
 
     if not args.dataset.exists():
         print(f"No dataset found at {args.dataset}. Run generate_synthetic_feedback.py first.")
@@ -68,6 +82,11 @@ def main() -> None:
     print(f"Seeding {len(texts)} feedback items against {BASE_URL} ...")
 
     with httpx.Client(base_url=BASE_URL, timeout=30.0) as client:
+        login = client.post(
+            "/auth/login", json={"email": args.admin_email, "password": args.admin_password}
+        )
+        login.raise_for_status()
+
         for i, text in enumerate(texts, start=1):
             payload = {"raw_text": text, **synthetic_metadata()}
             response = client.post("/feedback", json=payload)

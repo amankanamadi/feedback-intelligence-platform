@@ -46,14 +46,66 @@ def db_session():
 
 
 @pytest.fixture
-def client(db_session):
+def _db_override(db_session):
+    """Wires get_db to the test's db_session and resets rate-limit state.
+
+    Split out from `client` so that `client`/`user_client`/`admin_client`
+    can each get their OWN TestClient (own cookie jar) while still sharing
+    the same db_session - a test requesting more than one of them needs
+    genuinely independent authenticated identities, not the same
+    connection re-logging-in and clobbering its own cookies.
+    """
+
     def _override_get_db():
         yield db_session
 
+    # Rate-limit counters (app.state.limiter) are process-global and would
+    # otherwise leak between tests - a fast pytest run can trip a per-minute
+    # auth rate limit purely from unrelated tests sharing the same window.
+    app.state.limiter.reset()
+
     app.dependency_overrides[get_db] = _override_get_db
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(_db_override):
     with TestClient(app) as test_client:
         yield test_client
-    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def user_client(_db_override):
+    """An independent TestClient authenticated as a regular USER."""
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/auth/register", json={"email": "test-user@example.com", "password": "test-password-123"}
+        )
+        assert response.status_code == 201, response.text
+        yield test_client
+
+
+@pytest.fixture
+def admin_client(_db_override, db_session):
+    """An independent TestClient authenticated as an ADMIN. Admins are
+    never created via self-service registration, so this seeds the row
+    directly via crud, matching how a real admin account would be
+    provisioned out-of-band.
+    """
+    from app.core.security import hash_password
+    from app.database import crud
+    from app.database.models import Role
+
+    crud.create_user(
+        db_session, email="test-admin@example.com", hashed_password=hash_password("test-password-123"), role=Role.ADMIN
+    )
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/auth/login", json={"email": "test-admin@example.com", "password": "test-password-123"}
+        )
+        assert response.status_code == 200, response.text
+        yield test_client
 
 
 DEFAULT_CLASSIFICATION = FeedbackClassification(

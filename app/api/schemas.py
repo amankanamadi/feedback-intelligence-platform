@@ -1,38 +1,18 @@
 from __future__ import annotations
 
 import enum
-import re
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.database.models import FeedbackSource
-
-# Built from bare codepoints (via chr()) rather than embedding the actual
-# invisible/control characters in this source file, which would be both
-# unreadable and easy to silently corrupt in an editor.
-_DANGEROUS_CODEPOINT_RANGES = [
-    (0x200B, 0x200F),  # zero-width space/joiners, LRM/RLM marks (obfuscation)
-    (0x202A, 0x202E),  # bidi embedding/override controls (visual spoofing)
-    (0x2066, 0x2069),  # bidi isolate controls
-    (0xFEFF, 0xFEFF),  # BOM / zero-width no-break space
-    (0x00, 0x08),  # C0 controls before tab
-    (0x0B, 0x0C),  # vertical tab, form feed
-    (0x0E, 0x1F),  # C0 controls after CR, before space
-    (0x7F, 0x7F),  # DEL
-]
-_DANGEROUS_CHARS = re.compile(
-    "[" + "".join(f"{chr(lo)}-{chr(hi)}" for lo, hi in _DANGEROUS_CODEPOINT_RANGES) + "]"
-)
-# The same character repeated 40+ times in a row - not something legitimate
-# feedback does, but a cheap way to waste tokens/cost on every AI call.
-_EXCESSIVE_REPETITION = re.compile(r"(.)\1{39,}")
+from app.api.sanitization import sanitize_optional_text, sanitize_required_text
+from app.database.models import FeedbackSource, FeedbackStatus, Priority
 
 # Submission metadata fields - optional, free-text, no fixed vocabulary
 # (unlike `source`, which is a closed channel enum).
 _METADATA_TEXT_FIELDS = (
-    "user_id",
+    "submitter_user_id_legacy",
     "name",
     "email",
     "product",
@@ -47,7 +27,11 @@ _METADATA_TEXT_FIELDS = (
 
 class FeedbackCreate(BaseModel):
     raw_text: str = Field(min_length=1, max_length=10_000)
-    user_id: Optional[str] = Field(None, max_length=50)
+    # Free-text provenance id for admin bulk-import of external/historical
+    # data (e.g. a legacy CRM id) - distinct from the real `user_id` FK,
+    # which is always set server-side from the authenticated caller, never
+    # from this field.
+    submitter_user_id_legacy: Optional[str] = Field(None, max_length=50)
     name: Optional[str] = Field(None, max_length=200)
     email: Optional[str] = Field(None, max_length=320)  # RFC 5321 max mailbox length
     source: Optional[FeedbackSource] = None
@@ -62,20 +46,12 @@ class FeedbackCreate(BaseModel):
     @field_validator("raw_text")
     @classmethod
     def _sanitize_and_validate(cls, v: str) -> str:
-        cleaned = _DANGEROUS_CHARS.sub("", v).strip()
-        if not cleaned:
-            raise ValueError("raw_text must not be empty or whitespace-only")
-        if _EXCESSIVE_REPETITION.search(cleaned):
-            raise ValueError("raw_text contains excessive repeated characters")
-        return cleaned
+        return sanitize_required_text(v, field_name="raw_text")
 
     @field_validator(*_METADATA_TEXT_FIELDS, mode="before")
     @classmethod
     def _sanitize_metadata_text(cls, v):
-        if v is None:
-            return v
-        cleaned = _DANGEROUS_CHARS.sub("", v).strip()
-        return cleaned or None
+        return sanitize_optional_text(v)
 
 
 class BulkFeedbackCreate(BaseModel):
@@ -97,11 +73,42 @@ class AttachmentRead(BaseModel):
     created_at: datetime
 
 
-class FeedbackRead(BaseModel):
+class FeedbackUserRead(BaseModel):
+    """Shape returned to a USER-role caller viewing their own feedback.
+
+    Deliberately excludes every AI-analysis field (category, subcategory,
+    sentiment, confidence, themes, summary) and admin-only fields
+    (internal_notes, tags) - the router constructs this model explicitly
+    rather than relying on a shared response_model, so those attributes
+    are never even read off the ORM object for a USER-role response, let
+    alone serialized.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     raw_text: str
+    status: str
+    acknowledgement: Optional[str] = None
+    admin_response: Optional[str] = None
+    admin_response_at: Optional[datetime] = None
+    attachments: list[AttachmentRead] = []
+    source: Optional[str] = None
+    product: Optional[str] = None
+    module: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("status", "source", mode="before")
+    @classmethod
+    def _enum_to_value(cls, v):
+        return v.value if isinstance(v, enum.Enum) else v
+
+
+class FeedbackAdminRead(FeedbackUserRead):
+    """Shape returned to an ADMIN-role caller - everything a user sees,
+    plus AI analysis results and admin-only workflow fields."""
+
     main_category: Optional[str] = None
     sub_category: Optional[str] = None
     sentiment: Optional[str] = None
@@ -109,29 +116,44 @@ class FeedbackRead(BaseModel):
     confidence: Optional[int] = None
     summary: Optional[str] = None
     themes: list[str] = []
-    attachments: list[AttachmentRead] = []
-    user_id: Optional[str] = None
+    tags: list[str] = []
+    internal_notes: Optional[str] = None
+    user_id: Optional[int] = None
+    submitter_user_id_legacy: Optional[str] = None
     name: Optional[str] = None
     email: Optional[str] = None
-    source: Optional[str] = None
-    product: Optional[str] = None
-    module: Optional[str] = None
     version: Optional[str] = None
     device: Optional[str] = None
     browser: Optional[str] = None
     platform: Optional[str] = None
     region: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
 
-    @field_validator(
-        "main_category", "sub_category", "sentiment", "priority", "source", mode="before"
-    )
+    @field_validator("main_category", "sub_category", "sentiment", "priority", mode="before")
     @classmethod
-    def _enum_to_value(cls, v):
+    def _admin_enum_to_value(cls, v):
         return v.value if isinstance(v, enum.Enum) else v
 
-    @field_validator("themes", mode="before")
+    @field_validator("themes", "tags", mode="before")
     @classmethod
-    def _themes_to_names(cls, v):
-        return [t.name if hasattr(t, "name") else t for t in v]
+    def _names(cls, v):
+        return [item.name if hasattr(item, "name") else item for item in v]
+
+
+class FeedbackAdminUpdate(BaseModel):
+    status: Optional[FeedbackStatus] = None
+    priority: Optional[Priority] = None
+    tags: Optional[list[str]] = Field(None, max_length=20)
+    internal_notes: Optional[str] = Field(None, max_length=5_000)
+    admin_response: Optional[str] = Field(None, max_length=5_000)
+
+    @field_validator("internal_notes", "admin_response", mode="before")
+    @classmethod
+    def _sanitize(cls, v):
+        return sanitize_optional_text(v)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _sanitize_tags(cls, v):
+        if v is None:
+            return v
+        return [sanitize_optional_text(tag) for tag in v if sanitize_optional_text(tag)]

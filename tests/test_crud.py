@@ -44,7 +44,7 @@ def test_create_feedback_persists_metadata_fields(db_session):
     feedback = crud.create_feedback(
         db_session,
         raw_text="Can't upload invoices after today's update.",
-        user_id="user-42",
+        submitter_user_id_legacy="user-42",
         name="Jordan Lee",
         email="jordan@example.com",
         source=FeedbackSource.MOBILE_APP,
@@ -57,7 +57,7 @@ def test_create_feedback_persists_metadata_fields(db_session):
         region="US-East",
     )
 
-    assert feedback.user_id == "user-42"
+    assert feedback.submitter_user_id_legacy == "user-42"
     assert feedback.name == "Jordan Lee"
     assert feedback.email == "jordan@example.com"
     assert feedback.source == FeedbackSource.MOBILE_APP
@@ -73,7 +73,7 @@ def test_create_feedback_persists_metadata_fields(db_session):
 def test_create_feedback_metadata_fields_default_to_none(db_session):
     feedback = crud.create_feedback(db_session, raw_text="No metadata here.")
 
-    assert feedback.user_id is None
+    assert feedback.submitter_user_id_legacy is None
     assert feedback.name is None
     assert feedback.email is None
     assert feedback.source is None

@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.ai.weekly_report import generate_weekly_narrative
 from app.analytics.schemas import WeeklyReportResponse
 from app.analytics.service import get_analytics_summary, get_notable_feedback
-from app.database.models import Priority, Sentiment
+from app.core.security import RequireAdmin
+from app.database.models import Priority, Sentiment, User
 from app.database.session import get_db
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ REPORT_WINDOW_DAYS = 7
 
 
 @router.get("/reports/weekly", response_model=WeeklyReportResponse)
-def weekly_report(db: Session = Depends(get_db)) -> WeeklyReportResponse:
+def weekly_report(current_user: User = Depends(RequireAdmin), db: Session = Depends(get_db)) -> WeeklyReportResponse:
     period_end = datetime.now(timezone.utc)
     period_start = period_end - timedelta(days=REPORT_WINDOW_DAYS)
 

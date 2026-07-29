@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import ValidationError
@@ -7,11 +7,19 @@ from sqlalchemy.orm import Session
 
 from app.ai.classification import classify_feedback
 from app.api.bulk_upload_parsing import parse_bulk_upload_file
-from app.api.schemas import BulkFeedbackCreate, FeedbackCreate, FeedbackRead
+from app.api.schemas import (
+    BulkFeedbackCreate,
+    FeedbackAdminRead,
+    FeedbackAdminUpdate,
+    FeedbackCreate,
+    FeedbackUserRead,
+)
 from app.core.config import get_settings
+from app.core.security import RequireAdmin, assert_owns_or_admin, get_current_user
 from app.database import crud
-from app.database.models import Feedback, FeedbackSource, MainCategory, Sentiment
+from app.database.models import Feedback, FeedbackSource, MainCategory, Role, Sentiment, User
 from app.database.session import get_db
+from app.services.acknowledgement import generate_acknowledgement
 from app.vector_store.embeddings import get_embedding
 from app.vector_store.retrieval import retrieve_similar_feedback
 
@@ -20,17 +28,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["feedback"])
 
 
-def _process_feedback_submission(db: Session, payload: FeedbackCreate) -> Feedback:
-    """Create + embed + retrieve RAG context + classify a single item.
+def _shape_feedback(feedback: Feedback, current_user: User) -> Union[FeedbackAdminRead, FeedbackUserRead]:
+    """Every feedback-returning route picks the response shape by role and
+    constructs the Pydantic model explicitly here, rather than relying on
+    a single static response_model - this is what guarantees AI-analysis
+    fields are structurally absent from a USER-role response, not merely
+    hidden. Routes that call this pass response_model=None so FastAPI
+    doesn't re-validate/coerce the result against an inferred schema
+    (FeedbackAdminRead being a subclass of FeedbackUserRead makes that
+    inference unreliable - it could silently upcast a user-shaped result).
+    """
+    if current_user.role == Role.ADMIN:
+        return FeedbackAdminRead.model_validate(feedback)
+    return FeedbackUserRead.model_validate(feedback)
 
-    Shared by the single-item and bulk endpoints so both go through
-    identical logic. Each step degrades independently on failure (a failed
-    embedding/classification never blocks storing the raw feedback).
+
+def _process_feedback_submission(db: Session, payload: FeedbackCreate, *, owner_user_id: Optional[int]) -> Feedback:
+    """Create + embed + retrieve RAG context + classify + acknowledge a
+    single item. Shared by the single-item and bulk endpoints so both go
+    through identical logic. Each AI step degrades independently on
+    failure (a failed embedding/classification never blocks storing the
+    raw feedback); the acknowledgement step never fails since it's a pure
+    template lookup, not a network call.
     """
     feedback = crud.create_feedback(
         db,
         raw_text=payload.raw_text,
-        user_id=payload.user_id,
+        owner_user_id=owner_user_id,
+        submitter_user_id_legacy=payload.submitter_user_id_legacy,
         name=payload.name,
         email=payload.email,
         source=payload.source,
@@ -54,6 +79,7 @@ def _process_feedback_submission(db: Session, payload: FeedbackCreate) -> Feedba
             feedback.id,
         )
 
+    classification = None
     try:
         classification = classify_feedback(payload.raw_text, similar_examples=similar_examples)
     except Exception:
@@ -74,6 +100,14 @@ def _process_feedback_submission(db: Session, payload: FeedbackCreate) -> Feedba
         except Exception:
             db.rollback()
             logger.exception("Saving classification failed for feedback %s; leaving unclassified", feedback.id)
+            classification = None
+
+    acknowledgement = generate_acknowledgement(
+        sub_category=classification.sub_category if classification else None,
+        priority=classification.priority if classification else None,
+        confidence=classification.confidence if classification else None,
+    )
+    feedback = crud.set_acknowledgement(db, feedback, acknowledgement)
 
     if embedding is not None:
         try:
@@ -84,20 +118,35 @@ def _process_feedback_submission(db: Session, payload: FeedbackCreate) -> Feedba
     return feedback
 
 
-@router.post("/feedback", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
-def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> FeedbackRead:
-    return _process_feedback_submission(db, payload)
+@router.post("/feedback", response_model=None, status_code=status.HTTP_201_CREATED)
+def submit_feedback(
+    payload: FeedbackCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Union[FeedbackAdminRead, FeedbackUserRead]:
+    feedback = _process_feedback_submission(db, payload, owner_user_id=current_user.id)
+    return _shape_feedback(feedback, current_user)
 
 
-@router.post("/bulk-upload", response_model=list[FeedbackRead], status_code=status.HTTP_201_CREATED)
-def bulk_upload_feedback(payload: BulkFeedbackCreate, db: Session = Depends(get_db)) -> list[FeedbackRead]:
-    return [_process_feedback_submission(db, item) for item in payload.items]
+@router.post("/bulk-upload", response_model=list[FeedbackAdminRead], status_code=status.HTTP_201_CREATED)
+def bulk_upload_feedback(
+    payload: BulkFeedbackCreate,
+    current_user: User = Depends(RequireAdmin),
+    db: Session = Depends(get_db),
+) -> list[FeedbackAdminRead]:
+    # Admin-imported items (historical/external data) have no real
+    # authenticated submitter - left owner_user_id=None, which makes them
+    # visible only to admins (a NULL owner never matches a USER's
+    # ownership check).
+    return [_process_feedback_submission(db, item, owner_user_id=None) for item in payload.items]
 
 
-@router.post("/bulk-upload/file", response_model=list[FeedbackRead], status_code=status.HTTP_201_CREATED)
+@router.post("/bulk-upload/file", response_model=list[FeedbackAdminRead], status_code=status.HTTP_201_CREATED)
 async def bulk_upload_feedback_file(
-    file: UploadFile = File(...), db: Session = Depends(get_db)
-) -> list[FeedbackRead]:
+    file: UploadFile = File(...),
+    current_user: User = Depends(RequireAdmin),
+    db: Session = Depends(get_db),
+) -> list[FeedbackAdminRead]:
     settings = get_settings()
     raw_bytes = await file.read()
     if len(raw_bytes) > settings.bulk_upload_max_file_bytes:
@@ -119,10 +168,10 @@ async def bulk_upload_feedback_file(
         detail = [{"loc": err["loc"], "msg": err["msg"], "type": err["type"]} for err in exc.errors()]
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail) from exc
 
-    return [_process_feedback_submission(db, item) for item in payload.items]
+    return [_process_feedback_submission(db, item, owner_user_id=None) for item in payload.items]
 
 
-@router.get("/feedback", response_model=list[FeedbackRead])
+@router.get("/feedback", response_model=None)
 def list_feedback(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -131,9 +180,13 @@ def list_feedback(
     search: Optional[str] = Query(None, min_length=1, max_length=200),
     source: Optional[FeedbackSource] = Query(None),
     product: Optional[str] = Query(None, min_length=1, max_length=100),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[FeedbackRead]:
-    return crud.list_feedback(
+) -> list[Union[FeedbackAdminRead, FeedbackUserRead]]:
+    # A USER-role caller is always scoped to their own rows here, at the
+    # crud layer - never trust a client-supplied filter for this.
+    owner_user_id = None if current_user.role == Role.ADMIN else current_user.id
+    items = crud.list_feedback(
         db,
         skip=skip,
         limit=limit,
@@ -142,12 +195,35 @@ def list_feedback(
         search=search,
         source=source,
         product=product,
+        owner_user_id=owner_user_id,
     )
+    return [_shape_feedback(item, current_user) for item in items]
 
 
-@router.get("/feedback/{feedback_id}", response_model=FeedbackRead)
-def get_feedback(feedback_id: int, db: Session = Depends(get_db)) -> FeedbackRead:
+@router.get("/feedback/{feedback_id}", response_model=None)
+def get_feedback(
+    feedback_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Union[FeedbackAdminRead, FeedbackUserRead]:
     feedback = crud.get_feedback(db, feedback_id)
     if feedback is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
-    return feedback
+    assert_owns_or_admin(feedback.user_id, current_user)
+    return _shape_feedback(feedback, current_user)
+
+
+@router.patch("/feedback/{feedback_id}", response_model=FeedbackAdminRead)
+def update_feedback(
+    feedback_id: int,
+    payload: FeedbackAdminUpdate,
+    current_user: User = Depends(RequireAdmin),
+    db: Session = Depends(get_db),
+) -> FeedbackAdminRead:
+    feedback = crud.get_feedback(db, feedback_id)
+    if feedback is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    updates.pop("tags", None)
+    return crud.update_feedback_admin_fields(db, feedback, tag_names=payload.tags, **updates)

@@ -9,9 +9,10 @@ from fpdf import FPDF
 from sqlalchemy.orm import Session
 
 from app.database import crud
-from app.database.models import Feedback, FeedbackSource, MainCategory, Sentiment
+from app.database.models import Feedback, FeedbackSource, MainCategory, Sentiment, User
 from app.database.session import get_db
 from app.core.config import get_settings
+from app.core.security import RequireAdmin
 
 router = APIRouter(tags=["feedback"])
 
@@ -25,7 +26,7 @@ _CSV_COLUMNS = [
     "confidence",
     "summary",
     "themes",
-    "user_id",
+    "submitter_user_id_legacy",
     "name",
     "email",
     "source",
@@ -57,7 +58,7 @@ def _feedback_to_csv_row(item: Feedback) -> list:
         item.confidence,
         item.summary,
         "; ".join(theme.name for theme in item.themes),
-        item.user_id,
+        item.submitter_user_id_legacy,
         item.name,
         item.email,
         _value(item.source),
@@ -101,6 +102,7 @@ def export_feedback_csv(
     search: Optional[str] = Query(None, min_length=1, max_length=200),
     source: Optional[FeedbackSource] = Query(None),
     product: Optional[str] = Query(None, min_length=1, max_length=100),
+    current_user: User = Depends(RequireAdmin),
     db: Session = Depends(get_db),
 ) -> Response:
     items = _fetch_items(db, main_category, sentiment, search, source, product)
@@ -184,6 +186,7 @@ def export_feedback_pdf(
     search: Optional[str] = Query(None, min_length=1, max_length=200),
     source: Optional[FeedbackSource] = Query(None),
     product: Optional[str] = Query(None, min_length=1, max_length=100),
+    current_user: User = Depends(RequireAdmin),
     db: Session = Depends(get_db),
 ) -> Response:
     items = _fetch_items(db, main_category, sentiment, search, source, product)

@@ -23,8 +23,8 @@ def mock_narrative(monkeypatch):
     return narrative_mock
 
 
-def test_weekly_report_empty_db(client, mock_narrative):
-    response = client.get("/reports/weekly")
+def test_weekly_report_empty_db(admin_client, mock_narrative):
+    response = admin_client.get("/reports/weekly")
 
     assert response.status_code == 200
     body = response.json()
@@ -35,7 +35,7 @@ def test_weekly_report_empty_db(client, mock_narrative):
     assert body["key_wins"] == ["Win one."]
 
 
-def test_weekly_report_reflects_seeded_data(client, db_session, mock_narrative):
+def test_weekly_report_reflects_seeded_data(admin_client, db_session, mock_narrative):
     urgent = crud.create_feedback(db_session, raw_text="Critical login outage.")
     crud.apply_classification(
         db_session,
@@ -62,7 +62,7 @@ def test_weekly_report_reflects_seeded_data(client, db_session, mock_narrative):
         theme_names=["Feature Love"],
     )
 
-    response = client.get("/reports/weekly")
+    response = admin_client.get("/reports/weekly")
 
     assert response.status_code == 200
     body = response.json()
@@ -73,10 +73,10 @@ def test_weekly_report_reflects_seeded_data(client, db_session, mock_narrative):
     assert body["positive_highlights"][0]["raw_text"] == "Loving the new feature!"
 
 
-def test_weekly_report_degrades_gracefully_when_narrative_fails(client, mock_narrative):
+def test_weekly_report_degrades_gracefully_when_narrative_fails(admin_client, mock_narrative):
     mock_narrative.side_effect = RuntimeError("OpenAI is down")
 
-    response = client.get("/reports/weekly")
+    response = admin_client.get("/reports/weekly")
 
     assert response.status_code == 200
     body = response.json()

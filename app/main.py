@@ -2,16 +2,21 @@ import logging
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import OperationalError
 
 from app.api.analytics import router as analytics_router
 from app.api.attachments import router as attachments_router
+from app.api.auth import router as auth_router
 from app.api.feedback import router as feedback_router
 from app.api.feedback_export import router as feedback_export_router
 from app.api.reports import router as reports_router
 from app.core.config import Settings, get_settings
+from app.core.rate_limit import limiter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +27,19 @@ logger = logging.getLogger(__name__)
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(title="AI Customer Feedback Intelligence Platform")
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+)
+
+app.include_router(auth_router)
 app.include_router(feedback_router)
 app.include_router(feedback_export_router)
 app.include_router(analytics_router)

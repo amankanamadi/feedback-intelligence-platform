@@ -17,8 +17,8 @@ def _seed(db_session, raw_text, main_category, sentiment, themes):
     )
 
 
-def test_analytics_endpoint_returns_expected_shape_on_empty_db(client):
-    response = client.get("/analytics")
+def test_analytics_endpoint_returns_expected_shape_on_empty_db(admin_client):
+    response = admin_client.get("/analytics")
 
     assert response.status_code == 200
     body = response.json()
@@ -27,11 +27,11 @@ def test_analytics_endpoint_returns_expected_shape_on_empty_db(client):
     assert len(body["confidence_distribution"]) == 5
 
 
-def test_analytics_endpoint_reflects_seeded_data(client, db_session):
+def test_analytics_endpoint_reflects_seeded_data(admin_client, db_session):
     _seed(db_session, "a", MainCategory.INCIDENT, Sentiment.NEGATIVE, ["Perf"])
     _seed(db_session, "b", MainCategory.GENERAL_FEEDBACK, Sentiment.POSITIVE, ["Nice"])
 
-    response = client.get("/analytics")
+    response = admin_client.get("/analytics")
 
     assert response.status_code == 200
     body = response.json()
@@ -40,12 +40,12 @@ def test_analytics_endpoint_reflects_seeded_data(client, db_session):
     assert body["general_feedback"] == 1
 
 
-def test_themes_endpoint_orders_by_frequency(client, db_session):
+def test_themes_endpoint_orders_by_frequency(admin_client, db_session):
     _seed(db_session, "a", MainCategory.INCIDENT, Sentiment.NEGATIVE, ["Popular"])
     _seed(db_session, "b", MainCategory.INCIDENT, Sentiment.NEGATIVE, ["Popular"])
     _seed(db_session, "c", MainCategory.INCIDENT, Sentiment.NEGATIVE, ["Rare"])
 
-    response = client.get("/themes")
+    response = admin_client.get("/themes")
 
     assert response.status_code == 200
     body = response.json()
@@ -53,11 +53,11 @@ def test_themes_endpoint_orders_by_frequency(client, db_session):
     assert body[0]["count"] == 2
 
 
-def test_themes_endpoint_respects_limit(client, db_session):
+def test_themes_endpoint_respects_limit(admin_client, db_session):
     for i in range(5):
         _seed(db_session, f"item {i}", MainCategory.INCIDENT, Sentiment.NEGATIVE, [f"Theme{i}"])
 
-    response = client.get("/themes", params={"limit": 2})
+    response = admin_client.get("/themes", params={"limit": 2})
 
     assert response.status_code == 200
     assert len(response.json()) == 2

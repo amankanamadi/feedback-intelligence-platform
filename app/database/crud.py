@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,11 +10,16 @@ from app.database.models import (
     Attachment,
     Feedback,
     FeedbackSource,
+    FeedbackStatus,
     MainCategory,
+    PasswordResetToken,
     Priority,
+    Role,
     Sentiment,
     SubCategory,
+    Tag,
     Theme,
+    User,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,6 +32,15 @@ def get_or_create_theme(db: Session, name: str) -> Theme:
         db.add(theme)
         db.flush()
     return theme
+
+
+def get_or_create_tag(db: Session, name: str) -> Tag:
+    tag = db.scalar(select(Tag).where(Tag.name == name))
+    if tag is None:
+        tag = Tag(name=name)
+        db.add(tag)
+        db.flush()
+    return tag
 
 
 def _dedupe_preserve_order(names: list[str]) -> list[str]:
@@ -51,12 +66,18 @@ def _resolve_themes(db: Session, theme_names: list[str]) -> list[Theme]:
     return [get_or_create_theme(db, name) for name in _dedupe_preserve_order(theme_names)]
 
 
+def _resolve_tags(db: Session, tag_names: list[str]) -> list[Tag]:
+    """Same dedupe rationale as _resolve_themes, for the admin-managed Tag."""
+    return [get_or_create_tag(db, name) for name in _dedupe_preserve_order(tag_names)]
+
+
 def create_feedback(
     db: Session,
     raw_text: str,
     theme_names: list[str] | None = None,
     *,
-    user_id: str | None = None,
+    owner_user_id: int | None = None,
+    submitter_user_id_legacy: str | None = None,
     name: str | None = None,
     email: str | None = None,
     source: FeedbackSource | None = None,
@@ -77,7 +98,8 @@ def create_feedback(
 
     feedback = Feedback(
         raw_text=raw_text,
-        user_id=user_id,
+        user_id=owner_user_id,
+        submitter_user_id_legacy=submitter_user_id_legacy,
         name=name,
         email=email,
         source=source,
@@ -130,6 +152,40 @@ def set_embedding(db: Session, feedback: Feedback, embedding: list[float]) -> Fe
     return feedback
 
 
+def set_acknowledgement(db: Session, feedback: Feedback, acknowledgement: str) -> Feedback:
+    feedback.acknowledgement = acknowledgement
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+
+def update_feedback_admin_fields(
+    db: Session,
+    feedback: Feedback,
+    *,
+    status: FeedbackStatus | None = None,
+    priority: Priority | None = None,
+    tag_names: list[str] | None = None,
+    internal_notes: str | None = None,
+    admin_response: str | None = None,
+) -> Feedback:
+    if status is not None:
+        feedback.status = status
+    if priority is not None:
+        feedback.priority = priority
+    if tag_names is not None:
+        feedback.tags = _resolve_tags(db, tag_names)
+    if internal_notes is not None:
+        feedback.internal_notes = internal_notes
+    if admin_response is not None:
+        feedback.admin_response = admin_response
+        feedback.admin_response_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+
 def get_feedback(db: Session, feedback_id: int) -> Feedback | None:
     return db.get(Feedback, feedback_id)
 
@@ -143,6 +199,7 @@ def list_feedback(
     search: str | None = None,
     source: FeedbackSource | None = None,
     product: str | None = None,
+    owner_user_id: int | None = None,
 ) -> list[Feedback]:
     stmt = select(Feedback).order_by(Feedback.created_at.desc())
     if main_category is not None:
@@ -155,6 +212,11 @@ def list_feedback(
         stmt = stmt.where(Feedback.source == source)
     if product:
         stmt = stmt.where(Feedback.product.ilike(f"%{product}%"))
+    # Scopes a USER-role caller to their own rows; ADMIN callers pass None
+    # and see everything. Enforced here (not just in the router) so every
+    # call site gets the same ownership guarantee for free.
+    if owner_user_id is not None:
+        stmt = stmt.where(Feedback.user_id == owner_user_id)
     stmt = stmt.offset(skip).limit(limit)
     return list(db.scalars(stmt))
 
@@ -183,3 +245,57 @@ def create_attachment(
 
 def get_attachment(db: Session, attachment_id: int) -> Attachment | None:
     return db.get(Attachment, attachment_id)
+
+
+def get_user_by_email(db: Session, email: str) -> User | None:
+    return db.scalar(select(User).where(User.email == email))
+
+
+def get_user_by_id(db: Session, user_id: int) -> User | None:
+    return db.get(User, user_id)
+
+
+def create_user(
+    db: Session,
+    *,
+    email: str,
+    hashed_password: str,
+    full_name: str | None = None,
+    role: Role = Role.USER,
+) -> User:
+    user = User(email=email, hashed_password=hashed_password, full_name=full_name, role=role)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user_password(db: Session, user: User, hashed_password: str) -> User:
+    user.hashed_password = hashed_password
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def create_password_reset_token(
+    db: Session, *, user_id: int, token_hash: str, expires_at: datetime
+) -> PasswordResetToken:
+    reset_token = PasswordResetToken(user_id=user_id, token_hash=token_hash, expires_at=expires_at)
+    db.add(reset_token)
+    db.commit()
+    db.refresh(reset_token)
+    return reset_token
+
+
+def get_valid_reset_token(db: Session, token_hash: str) -> PasswordResetToken | None:
+    token = db.scalar(select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash))
+    if token is None or token.used_at is not None:
+        return None
+    if token.expires_at < datetime.now(timezone.utc):
+        return None
+    return token
+
+
+def mark_reset_token_used(db: Session, token: PasswordResetToken) -> None:
+    token.used_at = datetime.now(timezone.utc)
+    db.commit()

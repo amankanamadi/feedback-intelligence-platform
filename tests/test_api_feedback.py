@@ -5,8 +5,8 @@ from app.database.models import MainCategory, Priority, Sentiment, SubCategory
 from tests.conftest import DEFAULT_CLASSIFICATION
 
 
-def test_submit_feedback_success(client, mock_ai):
-    response = client.post("/feedback", json={"raw_text": "Dashboard is very slow to load."})
+def test_submit_feedback_success(admin_client, mock_ai):
+    response = admin_client.post("/feedback", json={"raw_text": "Dashboard is very slow to load."})
 
     assert response.status_code == 201
     body = response.json()
@@ -20,63 +20,63 @@ def test_submit_feedback_success(client, mock_ai):
     mock_ai["store"].assert_called_once()
 
 
-def test_submit_feedback_rejects_empty_text(client, mock_ai):
-    response = client.post("/feedback", json={"raw_text": ""})
+def test_submit_feedback_rejects_empty_text(admin_client, mock_ai):
+    response = admin_client.post("/feedback", json={"raw_text": ""})
 
     assert response.status_code == 422
     mock_ai["classify"].assert_not_called()
 
 
-def test_submit_feedback_rejects_whitespace_only_text(client, mock_ai):
-    response = client.post("/feedback", json={"raw_text": "   \n\t  "})
+def test_submit_feedback_rejects_whitespace_only_text(admin_client, mock_ai):
+    response = admin_client.post("/feedback", json={"raw_text": "   \n\t  "})
 
     assert response.status_code == 422
     mock_ai["classify"].assert_not_called()
 
 
-def test_submit_feedback_strips_surrounding_whitespace(client, mock_ai):
-    response = client.post("/feedback", json={"raw_text": "  Dashboard is slow.  "})
+def test_submit_feedback_strips_surrounding_whitespace(admin_client, mock_ai):
+    response = admin_client.post("/feedback", json={"raw_text": "  Dashboard is slow.  "})
 
     assert response.status_code == 201
     assert response.json()["raw_text"] == "Dashboard is slow."
 
 
-def test_submit_feedback_strips_zero_width_characters(client, mock_ai):
+def test_submit_feedback_strips_zero_width_characters(admin_client, mock_ai):
     zero_width_space = chr(0x200B)
     raw_text = f"The{zero_width_space}dashboard{zero_width_space}is{zero_width_space}slow."
 
-    response = client.post("/feedback", json={"raw_text": raw_text})
+    response = admin_client.post("/feedback", json={"raw_text": raw_text})
 
     assert response.status_code == 201
     assert response.json()["raw_text"] == "Thedashboardisslow."
 
 
-def test_submit_feedback_rejects_text_that_is_only_zero_width_characters(client, mock_ai):
+def test_submit_feedback_rejects_text_that_is_only_zero_width_characters(admin_client, mock_ai):
     only_zero_width = chr(0x200B) + chr(0x200C) + chr(0x200D)
 
-    response = client.post("/feedback", json={"raw_text": only_zero_width})
+    response = admin_client.post("/feedback", json={"raw_text": only_zero_width})
 
     assert response.status_code == 422
     mock_ai["classify"].assert_not_called()
 
 
-def test_submit_feedback_rejects_excessive_character_repetition(client, mock_ai):
-    response = client.post("/feedback", json={"raw_text": "a" * 100})
+def test_submit_feedback_rejects_excessive_character_repetition(admin_client, mock_ai):
+    response = admin_client.post("/feedback", json={"raw_text": "a" * 100})
 
     assert response.status_code == 422
     mock_ai["classify"].assert_not_called()
 
 
-def test_submit_feedback_allows_normal_repeated_punctuation(client, mock_ai):
-    response = client.post("/feedback", json={"raw_text": "This is sooooo slow!!!!"})
+def test_submit_feedback_allows_normal_repeated_punctuation(admin_client, mock_ai):
+    response = admin_client.post("/feedback", json={"raw_text": "This is sooooo slow!!!!"})
 
     assert response.status_code == 201
 
 
-def test_submit_feedback_degrades_gracefully_on_classification_failure(client, mock_ai):
+def test_submit_feedback_degrades_gracefully_on_classification_failure(admin_client, mock_ai):
     mock_ai["classify"].side_effect = RuntimeError("OpenAI is down")
 
-    response = client.post("/feedback", json={"raw_text": "Anything at all."})
+    response = admin_client.post("/feedback", json={"raw_text": "Anything at all."})
 
     assert response.status_code == 201
     body = response.json()
@@ -84,7 +84,7 @@ def test_submit_feedback_degrades_gracefully_on_classification_failure(client, m
     assert body["themes"] == []
 
 
-def test_submit_feedback_handles_duplicate_themes_from_ai(client, mock_ai):
+def test_submit_feedback_handles_duplicate_themes_from_ai(admin_client, mock_ai):
     mock_ai["classify"].return_value = FeedbackClassification(
         main_category=MainCategory.INCIDENT,
         sub_category=SubCategory.PERFORMANCE_ISSUE,
@@ -95,7 +95,7 @@ def test_submit_feedback_handles_duplicate_themes_from_ai(client, mock_ai):
         summary="Customer reports slow dashboard performance.",
     )
 
-    response = client.post("/feedback", json={"raw_text": "The dashboard is really slow."})
+    response = admin_client.post("/feedback", json={"raw_text": "The dashboard is really slow."})
 
     assert response.status_code == 201
     body = response.json()
@@ -103,10 +103,10 @@ def test_submit_feedback_handles_duplicate_themes_from_ai(client, mock_ai):
     assert sorted(body["themes"]) == ["Performance", "Slow Dashboard"]
 
 
-def test_submit_feedback_degrades_gracefully_on_embedding_failure(client, mock_ai):
+def test_submit_feedback_degrades_gracefully_on_embedding_failure(admin_client, mock_ai):
     mock_ai["get_embedding"].side_effect = RuntimeError("network error")
 
-    response = client.post("/feedback", json={"raw_text": "Anything at all."})
+    response = admin_client.post("/feedback", json={"raw_text": "Anything at all."})
 
     assert response.status_code == 201
     body = response.json()
@@ -114,7 +114,7 @@ def test_submit_feedback_degrades_gracefully_on_embedding_failure(client, mock_a
     mock_ai["store"].assert_not_called()  # no embedding available to store
 
 
-def test_submit_feedback_returns_503_when_database_unavailable(client, mock_ai, monkeypatch):
+def test_submit_feedback_returns_503_when_database_unavailable(admin_client, mock_ai, monkeypatch):
     import app.api.feedback as feedback_module
 
     def _raise_operational_error(*args, **kwargs):
@@ -122,28 +122,28 @@ def test_submit_feedback_returns_503_when_database_unavailable(client, mock_ai, 
 
     monkeypatch.setattr(feedback_module.crud, "create_feedback", _raise_operational_error)
 
-    response = client.post("/feedback", json={"raw_text": "Anything at all."})
+    response = admin_client.post("/feedback", json={"raw_text": "Anything at all."})
 
     assert response.status_code == 503
     assert "unavailable" in response.json()["detail"].lower()
 
 
-def test_get_feedback_not_found(client, mock_ai):
-    response = client.get("/feedback/999999")
+def test_get_feedback_not_found(admin_client, mock_ai):
+    response = admin_client.get("/feedback/999999")
 
     assert response.status_code == 404
 
 
-def test_get_feedback_by_id_round_trips(client, mock_ai):
-    created = client.post("/feedback", json={"raw_text": "Round trip test."}).json()
+def test_get_feedback_by_id_round_trips(admin_client, mock_ai):
+    created = admin_client.post("/feedback", json={"raw_text": "Round trip test."}).json()
 
-    response = client.get(f"/feedback/{created['id']}")
+    response = admin_client.get(f"/feedback/{created['id']}")
 
     assert response.status_code == 200
     assert response.json()["id"] == created["id"]
 
 
-def test_list_feedback_filters_by_category_and_search(client, mock_ai):
+def test_list_feedback_filters_by_category_and_search(admin_client, mock_ai):
     mock_ai["classify"].side_effect = [
         FeedbackClassification(
             main_category=MainCategory.INCIDENT,
@@ -165,29 +165,29 @@ def test_list_feedback_filters_by_category_and_search(client, mock_ai):
         ),
     ]
 
-    client.post("/feedback", json={"raw_text": "The dashboard is really slow."})
-    client.post("/feedback", json={"raw_text": "Please add dark mode."})
+    admin_client.post("/feedback", json={"raw_text": "The dashboard is really slow."})
+    admin_client.post("/feedback", json={"raw_text": "Please add dark mode."})
 
-    incident_only = client.get("/feedback", params={"main_category": "Incident"}).json()
+    incident_only = admin_client.get("/feedback", params={"main_category": "Incident"}).json()
     assert len(incident_only) == 1
     assert incident_only[0]["main_category"] == "Incident"
 
-    search_results = client.get("/feedback", params={"search": "dark mode"}).json()
+    search_results = admin_client.get("/feedback", params={"search": "dark mode"}).json()
     assert len(search_results) == 1
     assert "dark mode" in search_results[0]["raw_text"].lower()
 
 
-def test_list_feedback_pagination(client, mock_ai):
+def test_list_feedback_pagination(admin_client, mock_ai):
     for i in range(5):
-        client.post("/feedback", json={"raw_text": f"Feedback number {i}"})
+        admin_client.post("/feedback", json={"raw_text": f"Feedback number {i}"})
 
-    page = client.get("/feedback", params={"skip": 2, "limit": 2}).json()
+    page = admin_client.get("/feedback", params={"skip": 2, "limit": 2}).json()
 
     assert len(page) == 2
 
 
-def test_bulk_upload_processes_all_items_in_order(client, mock_ai):
-    response = client.post(
+def test_bulk_upload_processes_all_items_in_order(admin_client, mock_ai):
+    response = admin_client.post(
         "/bulk-upload",
         json={"items": [{"raw_text": "First item."}, {"raw_text": "Second item."}, {"raw_text": "Third item."}]},
     )
@@ -200,24 +200,24 @@ def test_bulk_upload_processes_all_items_in_order(client, mock_ai):
     assert mock_ai["store"].call_count == 3
 
 
-def test_bulk_upload_rejects_empty_items_list(client, mock_ai):
-    response = client.post("/bulk-upload", json={"items": []})
+def test_bulk_upload_rejects_empty_items_list(admin_client, mock_ai):
+    response = admin_client.post("/bulk-upload", json={"items": []})
 
     assert response.status_code == 422
     mock_ai["classify"].assert_not_called()
 
 
-def test_bulk_upload_rejects_batch_exceeding_max_size(client, mock_ai):
+def test_bulk_upload_rejects_batch_exceeding_max_size(admin_client, mock_ai):
     items = [{"raw_text": f"Feedback {i}"} for i in range(26)]
 
-    response = client.post("/bulk-upload", json={"items": items})
+    response = admin_client.post("/bulk-upload", json={"items": items})
 
     assert response.status_code == 422
     mock_ai["classify"].assert_not_called()
 
 
-def test_bulk_upload_rejects_whole_batch_if_any_item_is_invalid(client, mock_ai):
-    response = client.post(
+def test_bulk_upload_rejects_whole_batch_if_any_item_is_invalid(admin_client, mock_ai):
+    response = admin_client.post(
         "/bulk-upload",
         json={"items": [{"raw_text": "A valid entry."}, {"raw_text": "   "}]},
     )
@@ -226,14 +226,14 @@ def test_bulk_upload_rejects_whole_batch_if_any_item_is_invalid(client, mock_ai)
     mock_ai["classify"].assert_not_called()
 
 
-def test_bulk_upload_continues_past_individual_classification_failures(client, mock_ai):
+def test_bulk_upload_continues_past_individual_classification_failures(admin_client, mock_ai):
     mock_ai["classify"].side_effect = [
         DEFAULT_CLASSIFICATION,
         RuntimeError("OpenAI is down"),
         DEFAULT_CLASSIFICATION,
     ]
 
-    response = client.post(
+    response = admin_client.post(
         "/bulk-upload",
         json={"items": [{"raw_text": "First item."}, {"raw_text": "Second item."}, {"raw_text": "Third item."}]},
     )
@@ -246,12 +246,12 @@ def test_bulk_upload_continues_past_individual_classification_failures(client, m
     assert body[2]["main_category"] == "Incident"
 
 
-def test_submit_feedback_with_full_metadata_round_trips(client, mock_ai):
-    response = client.post(
+def test_submit_feedback_with_full_metadata_round_trips(admin_client, mock_ai):
+    response = admin_client.post(
         "/feedback",
         json={
             "raw_text": "Can't upload invoices after today's update.",
-            "user_id": "user-42",
+            "submitter_user_id_legacy": "user-42",
             "name": "Jordan Lee",
             "email": "jordan@example.com",
             "source": "Mobile App",
@@ -267,7 +267,7 @@ def test_submit_feedback_with_full_metadata_round_trips(client, mock_ai):
 
     assert response.status_code == 201
     body = response.json()
-    assert body["user_id"] == "user-42"
+    assert body["submitter_user_id_legacy"] == "user-42"
     assert body["name"] == "Jordan Lee"
     assert body["email"] == "jordan@example.com"
     assert body["source"] == "Mobile App"
@@ -280,17 +280,17 @@ def test_submit_feedback_with_full_metadata_round_trips(client, mock_ai):
     assert body["region"] == "US-East"
 
 
-def test_submit_feedback_without_metadata_defaults_to_null(client, mock_ai):
-    response = client.post("/feedback", json={"raw_text": "Just the text."})
+def test_submit_feedback_without_metadata_defaults_to_null(admin_client, mock_ai):
+    response = admin_client.post("/feedback", json={"raw_text": "Just the text."})
 
     assert response.status_code == 201
     body = response.json()
-    for field in ["user_id", "name", "email", "source", "product", "module", "version", "device", "browser", "platform", "region"]:
+    for field in ["submitter_user_id_legacy", "name", "email", "source", "product", "module", "version", "device", "browser", "platform", "region"]:
         assert body[field] is None
 
 
-def test_submit_feedback_rejects_invalid_source_value(client, mock_ai):
-    response = client.post(
+def test_submit_feedback_rejects_invalid_source_value(admin_client, mock_ai):
+    response = admin_client.post(
         "/feedback", json={"raw_text": "Anything at all.", "source": "Carrier Pigeon"}
     )
 
@@ -298,8 +298,8 @@ def test_submit_feedback_rejects_invalid_source_value(client, mock_ai):
     mock_ai["classify"].assert_not_called()
 
 
-def test_bulk_upload_captures_metadata_independently_per_item(client, mock_ai):
-    response = client.post(
+def test_bulk_upload_captures_metadata_independently_per_item(admin_client, mock_ai):
+    response = admin_client.post(
         "/bulk-upload",
         json={
             "items": [
@@ -317,11 +317,11 @@ def test_bulk_upload_captures_metadata_independently_per_item(client, mock_ai):
     assert body[1]["product"] is None
 
 
-def test_list_feedback_filters_by_source(client, mock_ai):
-    client.post("/feedback", json={"raw_text": "Via email.", "source": "Email"})
-    client.post("/feedback", json={"raw_text": "Via web form.", "source": "Web Form"})
+def test_list_feedback_filters_by_source(admin_client, mock_ai):
+    admin_client.post("/feedback", json={"raw_text": "Via email.", "source": "Email"})
+    admin_client.post("/feedback", json={"raw_text": "Via web form.", "source": "Web Form"})
 
-    response = client.get("/feedback", params={"source": "Email"})
+    response = admin_client.get("/feedback", params={"source": "Email"})
 
     assert response.status_code == 200
     body = response.json()
@@ -329,11 +329,11 @@ def test_list_feedback_filters_by_source(client, mock_ai):
     assert body[0]["raw_text"] == "Via email."
 
 
-def test_list_feedback_filters_by_product_partial_match(client, mock_ai):
-    client.post("/feedback", json={"raw_text": "Invoicing bug.", "product": "Invoicing"})
-    client.post("/feedback", json={"raw_text": "Unrelated.", "product": "Payroll"})
+def test_list_feedback_filters_by_product_partial_match(admin_client, mock_ai):
+    admin_client.post("/feedback", json={"raw_text": "Invoicing bug.", "product": "Invoicing"})
+    admin_client.post("/feedback", json={"raw_text": "Unrelated.", "product": "Payroll"})
 
-    response = client.get("/feedback", params={"product": "invoic"})
+    response = admin_client.get("/feedback", params={"product": "invoic"})
 
     assert response.status_code == 200
     body = response.json()
@@ -341,10 +341,10 @@ def test_list_feedback_filters_by_product_partial_match(client, mock_ai):
     assert body[0]["raw_text"] == "Invoicing bug."
 
 
-def test_bulk_upload_file_accepts_csv(client, mock_ai):
+def test_bulk_upload_file_accepts_csv(admin_client, mock_ai):
     csv_content = b"raw_text,source\nFirst item.,Web Form\nSecond item.,Email\n"
 
-    response = client.post(
+    response = admin_client.post(
         "/bulk-upload/file",
         files={"file": ("feedback.csv", csv_content, "text/csv")},
     )
@@ -356,10 +356,10 @@ def test_bulk_upload_file_accepts_csv(client, mock_ai):
     assert mock_ai["classify"].call_count == 2
 
 
-def test_bulk_upload_file_accepts_json(client, mock_ai):
+def test_bulk_upload_file_accepts_json(admin_client, mock_ai):
     json_content = b'[{"raw_text": "First item."}, {"raw_text": "Second item."}]'
 
-    response = client.post(
+    response = admin_client.post(
         "/bulk-upload/file",
         files={"file": ("feedback.json", json_content, "application/json")},
     )
@@ -369,11 +369,11 @@ def test_bulk_upload_file_accepts_json(client, mock_ai):
     assert [item["raw_text"] for item in body] == ["First item.", "Second item."]
 
 
-def test_bulk_upload_file_rejects_batch_exceeding_cap(client, mock_ai):
+def test_bulk_upload_file_rejects_batch_exceeding_cap(admin_client, mock_ai):
     rows = "\n".join(f"Feedback {i}" for i in range(26))
     csv_content = f"raw_text\n{rows}\n".encode()
 
-    response = client.post(
+    response = admin_client.post(
         "/bulk-upload/file",
         files={"file": ("feedback.csv", csv_content, "text/csv")},
     )
@@ -382,8 +382,8 @@ def test_bulk_upload_file_rejects_batch_exceeding_cap(client, mock_ai):
     mock_ai["classify"].assert_not_called()
 
 
-def test_bulk_upload_file_rejects_unsupported_extension(client, mock_ai):
-    response = client.post(
+def test_bulk_upload_file_rejects_unsupported_extension(admin_client, mock_ai):
+    response = admin_client.post(
         "/bulk-upload/file",
         files={"file": ("feedback.txt", b"raw_text\nsomething\n", "text/plain")},
     )
@@ -392,12 +392,12 @@ def test_bulk_upload_file_rejects_unsupported_extension(client, mock_ai):
     mock_ai["classify"].assert_not_called()
 
 
-def test_bulk_upload_file_rejects_oversized_file(client, mock_ai, monkeypatch):
+def test_bulk_upload_file_rejects_oversized_file(admin_client, mock_ai, monkeypatch):
     import app.api.feedback as feedback_module
 
     monkeypatch.setattr(feedback_module.get_settings(), "bulk_upload_max_file_bytes", 10)
 
-    response = client.post(
+    response = admin_client.post(
         "/bulk-upload/file",
         files={"file": ("feedback.csv", b"raw_text\nsomething much longer than 10 bytes\n", "text/csv")},
     )

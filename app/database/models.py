@@ -67,12 +67,32 @@ class FeedbackSource(str, enum.Enum):
     QR_CODE = "QR Code"
 
 
+class FeedbackStatus(str, enum.Enum):
+    NEW = "New"
+    ACKNOWLEDGED = "Acknowledged"
+    IN_REVIEW = "In Review"
+    IN_PROGRESS = "In Progress"
+    RESOLVED = "Resolved"
+    CLOSED = "Closed"
+
+
 # Association table for the many-to-many Feedback <-> Theme relationship.
+# AI-derived, read-only from the API's perspective - never editable via the
+# admin PATCH endpoint. Distinct from Tag/feedback_tags below, which is the
+# admin-managed equivalent.
 feedback_themes = Table(
     "feedback_themes",
     Base.metadata,
     Column("feedback_id", ForeignKey("feedback.id", ondelete="CASCADE"), primary_key=True),
     Column("theme_id", ForeignKey("themes.id", ondelete="CASCADE"), primary_key=True),
+)
+
+# Association table for the many-to-many Feedback <-> Tag relationship.
+feedback_tags = Table(
+    "feedback_tags",
+    Base.metadata,
+    Column("feedback_id", ForeignKey("feedback.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
 )
 
 
@@ -94,9 +114,33 @@ class Feedback(Base):
     summary: Mapped[Optional[str]]
     embedding: Mapped[Optional[list[float]]] = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=True)
 
-    # Submission metadata - who/where/how the feedback came in. Optional
-    # since not every channel can supply every field.
-    user_id: Mapped[Optional[str]]
+    # Auto-generated immediately after classification - the one AI-adjacent
+    # field a USER-role response is allowed to include, since it's the
+    # submitter's own receipt message, not an analysis internal.
+    acknowledgement: Mapped[Optional[str]]
+
+    # Admin workflow fields - never set by AI, only by an admin via
+    # PATCH /feedback/{id}.
+    status: Mapped[FeedbackStatus] = mapped_column(
+        Enum(FeedbackStatus, name="feedback_status_enum"), default=FeedbackStatus.NEW, server_default="NEW"
+    )
+    internal_notes: Mapped[Optional[str]]  # admin-only, never in a user-facing schema
+    admin_response: Mapped[Optional[str]]  # shown to the submitter once written
+    admin_response_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Real submitter identity, set server-side from the authenticated caller
+    # - never client-supplied. ondelete="SET NULL" (not CASCADE): deleting a
+    # user account must not delete their feedback history.
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Free-text submitter metadata - who/where/how the feedback came in.
+    # Optional since not every channel can supply every field.
+    # `submitter_user_id_legacy` predates real accounts (was a free-text,
+    # non-FK "user_id" string); kept only for historical export/audit
+    # visibility and admin bulk-import provenance, never joined to `users`.
+    submitter_user_id_legacy: Mapped[Optional[str]]
     name: Mapped[Optional[str]]
     email: Mapped[Optional[str]]
     source: Mapped[Optional[FeedbackSource]] = mapped_column(Enum(FeedbackSource, name="feedback_source_enum"))
@@ -113,9 +157,11 @@ class Feedback(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    submitter: Mapped[Optional["User"]] = relationship(back_populates="feedback_items")
     themes: Mapped[list["Theme"]] = relationship(
         secondary=feedback_themes, back_populates="feedback_items"
     )
+    tags: Mapped[list["Tag"]] = relationship(secondary=feedback_tags, back_populates="feedback_items")
     attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="feedback", cascade="all, delete-orphan"
     )
@@ -129,6 +175,23 @@ class Theme(Base):
 
     feedback_items: Mapped[list["Feedback"]] = relationship(
         secondary=feedback_themes, back_populates="themes"
+    )
+
+
+class Tag(Base):
+    """Admin-managed label, distinct from the AI-derived, read-only Theme.
+
+    Assigned via PATCH /feedback/{id}; never written by the classification
+    pipeline.
+    """
+
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True, index=True)
+
+    feedback_items: Mapped[list["Feedback"]] = relationship(
+        secondary=feedback_tags, back_populates="tags"
     )
 
 
@@ -146,3 +209,43 @@ class Attachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     feedback: Mapped["Feedback"] = relationship(back_populates="attachments")
+
+
+class Role(str, enum.Enum):
+    USER = "USER"
+    ADMIN = "ADMIN"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(unique=True, index=True)
+    hashed_password: Mapped[str]
+    full_name: Mapped[Optional[str]]
+    role: Mapped[Role] = mapped_column(Enum(Role, name="role_enum"), default=Role.USER, server_default="USER")
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    feedback_items: Mapped[list["Feedback"]] = relationship(back_populates="submitter")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # SHA-256 hash of the raw token - never store the usable credential
+    # itself, mirroring why passwords are hashed rather than stored plain.
+    token_hash: Mapped[str] = mapped_column(unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="reset_tokens")

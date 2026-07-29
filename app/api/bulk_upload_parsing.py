@@ -12,7 +12,7 @@ import json
 
 _ALLOWED_FIELDS = {
     "raw_text",
-    "user_id",
+    "submitter_user_id_legacy",
     "name",
     "email",
     "source",
