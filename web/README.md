@@ -7,14 +7,38 @@ is what carries the session.
 
 ## Getting started
 
+**One-command option**: `docker compose up --build` from the repo root
+starts the database, backend, and this app together (`:3000`). No local
+Node/Python install needed. It's a production build, so it won't
+hot-reload on file changes - use the steps below for active frontend
+development instead.
+
+**Local dev (hot-reload)**:
+
 1. Backend must be running (`uvicorn app.main:app --reload` from the repo
-   root, or `docker compose up`) and reachable at the URL in `.env.local`
+   root) and reachable at the URL in `.env.local`
    (`NEXT_PUBLIC_API_BASE_URL`, defaults to `http://localhost:8000`).
 2. Backend needs `CORS_ALLOWED_ORIGINS` to include this app's origin
    (`http://localhost:3000` by default - already set in the repo's
    `.env`).
 3. `npm install`
 4. `npm run dev` and open [http://localhost:3000](http://localhost:3000).
+
+## Running inside docker-compose
+
+`proxy.ts` calls the backend from the Next.js *server* process (not the
+browser) to check `/auth/me` on every navigation. Inside docker-compose
+that call needs the internal service hostname, which the browser can't
+resolve - so there are two separate base-URL variables:
+
+- `NEXT_PUBLIC_API_BASE_URL` - baked into the client bundle at build
+  time; must be the URL the **browser** can reach (`http://localhost:8000`
+  on the host, since the browser runs outside any container).
+- `INTERNAL_API_BASE_URL` - read at runtime by `proxy.ts` only; the
+  docker-compose service hostname (`http://app:8000`).
+
+Both are wired up already in the root `docker-compose.yml`'s `web`
+service - only relevant if you're changing how that's configured.
 
 ## One app, role-adaptive - not two portals
 

@@ -4,7 +4,13 @@ import type { NextRequest } from "next/server";
 // Next.js 16 renamed the `middleware.ts` file convention to `proxy.ts`
 // (middleware is deprecated). See node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md.
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+// proxy.ts runs server-side (inside the Next.js process, not the
+// browser) - in docker-compose that means it must reach the backend via
+// the internal service hostname (INTERNAL_API_BASE_URL=http://app:8000),
+// never the browser-facing NEXT_PUBLIC_ one. Local dev sets neither, so
+// it falls through to the same localhost default as before.
+const API_BASE_URL =
+  process.env.INTERNAL_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 type Role = "USER" | "ADMIN";
 type Me = { role: Role } | null;

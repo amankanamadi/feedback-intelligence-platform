@@ -1,0 +1,106 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  BarChart3,
+  FileClock,
+  Inbox,
+  MessageSquarePlus,
+  Settings,
+  Sliders,
+  Tags,
+  User,
+  Users,
+} from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+type NavGroup = {
+  label?: string;
+  adminOnly?: boolean;
+  items: NavItem[];
+};
+
+// One nav list for everyone - admin-only groups simply don't render for a
+// USER, rather than living in a separate portal/route tree.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { href: "/app/feedback/new", label: "Submit Feedback", icon: MessageSquarePlus },
+      { href: "/app/feedback", label: "Feedback", icon: Inbox },
+      { href: "/app/profile", label: "Profile", icon: User },
+    ],
+  },
+  {
+    label: "Analytics",
+    adminOnly: true,
+    items: [
+      { href: "/app/analytics", label: "Dashboard", icon: BarChart3 },
+      { href: "/app/reports/weekly", label: "Weekly Report", icon: FileClock },
+    ],
+  },
+  {
+    label: "Administration",
+    adminOnly: true,
+    items: [
+      { href: "/app/users", label: "Users", icon: Users },
+      { href: "/app/categories", label: "Categories", icon: Tags },
+      { href: "/app/ai-config", label: "AI Configuration", icon: Sliders },
+      { href: "/app/settings", label: "System Settings", icon: Settings },
+      { href: "/app/audit-logs", label: "Audit Logs", icon: FileClock },
+    ],
+  },
+];
+
+// Picks the single longest matching href across all nav items, so a page
+// like /app/feedback/new only lights up "Submit Feedback" - not also
+// "Feedback", which would otherwise match via a plain startsWith("/app/feedback/").
+function findActiveHref(pathname: string): string | null {
+  const allHrefs = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
+  const matches = allHrefs.filter((href) => pathname === href || pathname.startsWith(`${href}/`));
+  if (matches.length === 0) return null;
+  return matches.reduce((longest, href) => (href.length > longest.length ? href : longest));
+}
+
+export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  const activeHref = findActiveHref(pathname);
+
+  return (
+    <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 pb-6">
+      {NAV_GROUPS.filter((group) => !group.adminOnly || isAdmin).map((group, index) => (
+        <div key={group.label ?? index} className="flex flex-col gap-1">
+          {group.label && (
+            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+          )}
+          {group.items.map((item) => {
+            const active = item.href === activeHref;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <item.icon className="size-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
+}

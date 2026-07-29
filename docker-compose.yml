@@ -44,6 +44,22 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  web:
+    build:
+      context: ./web
+      args:
+        # Baked into the browser bundle at build time - must be an
+        # externally-reachable URL, never an internal service hostname.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    environment:
+      # Read at runtime by web/proxy.ts only (server-side, inside this
+      # container) - the internal compose network hostname for `app`.
+      INTERNAL_API_BASE_URL: http://app:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - app
+
 volumes:
   postgres_data:
   attachments_data:

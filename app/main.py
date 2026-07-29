@@ -1,10 +1,8 @@
 import logging
-from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, RedirectResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import OperationalError
@@ -24,13 +22,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-
 app = FastAPI(title="AI Customer Feedback Intelligence Platform")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# CORS allowlist is explicit (never "*") since allow_credentials=True is
+# required for the Next.js app's cookie-based auth to survive its
+# cross-port dev setup - this pairing is also this project's primary CSRF
+# defense (see app/core/security.py's cookie SameSite settings for the
+# other half): a browser won't attach these cookies to a request from any
+# origin not in this list, so classic cross-site form/fetch CSRF isn't
+# exploitable even without a double-submit token. Deliberately not adding
+# one on top of this for a same-site SPA + API pair.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allowed_origins,
@@ -45,19 +49,6 @@ app.include_router(feedback_export_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
 app.include_router(attachments_router)
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-
-
-@app.middleware("http")
-async def no_cache_for_frontend(request: Request, call_next):
-    """The dashboard is under active development - without this, browsers'
-    heuristic caching can keep serving an old dashboard.js/index.html for a
-    tab that's never been hard-refreshed, silently desyncing from the
-    server (e.g. new table columns rendered by old JS)."""
-    response = await call_next(request)
-    if request.url.path.startswith("/static") or request.url.path == "/dashboard":
-        response.headers["Cache-Control"] = "no-cache"
-    return response
 
 
 @app.exception_handler(OperationalError)
@@ -75,11 +66,9 @@ def health_check(settings: Settings = Depends(get_settings)) -> dict:
     return {"status": "ok", "app_name": settings.app_name}
 
 
-@app.get("/dashboard")
-def dashboard_page() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "index.html")
-
-
 @app.get("/")
 def root() -> RedirectResponse:
-    return RedirectResponse(url="/dashboard")
+    # This is a pure JSON API now - the product surface is the Next.js
+    # app in web/, on its own origin. The old static dashboard
+    # (frontend/index.html, served from here) has been retired.
+    return RedirectResponse(url="/docs")

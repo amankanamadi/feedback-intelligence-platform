@@ -18,6 +18,11 @@ cp .env.example .env   # then fill in OPENAI_API_KEY at minimum
 docker compose up -d db   # just the shared database, exposed on localhost:5432
 ```
 
+`.env`'s `JWT_SECRET_KEY` can stay empty for local dev (`DEBUG=true`
+allows it), but is **required** — the app refuses to start without it —
+once `DEBUG=false`, which is exactly what the `app` service in Option B
+below sets. Generate one with `openssl rand -hex 32` before using Option B.
+
 ### Option A: Local dev (venv + shared Docker database)
 
 ```bash
@@ -28,22 +33,50 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Open http://127.0.0.1:8000/dashboard, or verify the API directly:
+Verify the API directly, or open http://127.0.0.1:8000/docs for interactive API docs:
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-### Option B: Fully containerized (app + migrations also in Docker)
+The product frontend is the Next.js app in `web/` (see `web/README.md`) -
+it's a separate app on its own origin, not served by this backend.
+
+### Creating an admin account
+
+Every account created via signup/`POST /auth/register` gets the `user`
+role — there's no self-service or scripted way to become an admin (a
+deliberate, currently-unaddressed gap, not an oversight). To get the
+first admin: register a normal account through the app, then promote it
+directly in the database:
+
+```bash
+docker exec -it feedback-intelligence-platform-db-1 psql -U feedback_app -d feedback_intelligence \
+  -c "UPDATE users SET role = 'ADMIN' WHERE email = 'you@example.com';"
+```
+
+(Adjust the container name if it differs - check with `docker compose ps`.
+Log out and back in afterward so a fresh JWT picks up the new role.)
+
+### Option B: Fully containerized (backend + frontend + migrations, one command)
 
 ```bash
 docker compose up --build
 ```
 
-Builds the app image, runs migrations, then starts the app in a container —
-no local Python install needed at all. **Don't run this at the same time as
-Option A** — both bind to host port 8000, so pick one or the other for
-serving traffic; the shared `db` service can stay up either way.
+Builds and starts everything: the database, a one-shot migration
+container, the FastAPI backend on `:8000`, and the Next.js frontend on
+`:3000` — no local Python or Node install needed at all. Open
+http://localhost:3000/login once it's up.
+
+This is a production-style build of the frontend (no hot-reload) - for
+day-to-day frontend iteration, run `npm run dev` in `web/` against a
+`docker compose up -d db app`-only stack instead (Option A below covers
+the backend half of that).
+
+**Don't run Option A's `uvicorn --reload` at the same time as this** —
+both bind to host port 8000, so pick one or the other for serving
+backend traffic; the shared `db` service can stay up either way.
 
 To stop and remove containers (keeping volumes/data): `docker compose down`.
 To also wipe all data: `docker compose down -v`.
