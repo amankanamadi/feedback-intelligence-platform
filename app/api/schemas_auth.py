@@ -42,6 +42,15 @@ class UserRead(BaseModel):
         return v.value if isinstance(v, enum.Enum) else v
 
 
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=200)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def _sanitize(cls, v):
+        return sanitize_optional_text(v)
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 

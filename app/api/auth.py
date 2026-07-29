@@ -9,6 +9,7 @@ from app.api.schemas_auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     ResetPasswordRequest,
+    UpdateProfileRequest,
     UserLogin,
     UserRead,
     UserRegister,
@@ -141,6 +142,15 @@ def logout(response: Response) -> None:
 @router.get("/me", response_model=UserRead)
 def get_me(current_user: User = Depends(get_current_user)) -> UserRead:
     return current_user
+
+
+@router.patch("/me", response_model=UserRead)
+def update_me(
+    payload: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserRead:
+    return crud.update_user_profile(db, current_user, full_name=payload.full_name)
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)

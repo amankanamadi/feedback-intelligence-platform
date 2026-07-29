@@ -277,6 +277,13 @@ def update_user_password(db: Session, user: User, hashed_password: str) -> User:
     return user
 
 
+def update_user_profile(db: Session, user: User, *, full_name: str | None) -> User:
+    user.full_name = full_name
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def create_password_reset_token(
     db: Session, *, user_id: int, token_hash: str, expires_at: datetime
 ) -> PasswordResetToken:

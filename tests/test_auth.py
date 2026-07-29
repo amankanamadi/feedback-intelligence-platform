@@ -92,6 +92,22 @@ def test_me_returns_current_user_after_login(client):
     assert response.json()["email"] == "user@example.com"
 
 
+def test_update_profile_changes_full_name(client):
+    _register(client)
+
+    response = client.patch("/auth/me", json={"full_name": "Jane Q. User"})
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Jane Q. User"
+    assert client.get("/auth/me").json()["full_name"] == "Jane Q. User"
+
+
+def test_update_profile_requires_authentication(client):
+    response = client.patch("/auth/me", json={"full_name": "Someone"})
+
+    assert response.status_code == 401
+
+
 def test_logout_clears_session(client):
     _register(client)
     assert client.get("/auth/me").status_code == 200
