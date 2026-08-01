@@ -27,20 +27,48 @@ class ConfidenceBucket(BaseModel):
     count: int
 
 
+class CityBreakdown(BaseModel):
+    city: str
+    feedback_count: int
+    negative_rate: float
+
+
+class PropertyHealth(BaseModel):
+    property_id: int
+    property_name: str
+    city: str
+    health_score: float
+    feedback_count: int
+
+
+class HostPerformance(BaseModel):
+    host_name: str
+    feedback_count: int
+    avg_sentiment_score: float
+    open_critical_count: int
+
+
 class AnalyticsSummary(BaseModel):
     total_feedback: int
     classified_feedback: int
     positive_pct: float
     neutral_pct: float
     negative_pct: float
-    incidents: int
-    service_requests: int
-    general_feedback: int
+    guest_reviews: int
+    host_complaints: int
+    support_tickets: int
     average_confidence: Optional[float]
     sentiment_breakdown: list[SentimentCount]
     category_breakdown: list[CategoryCount]
     weekly_trend: list[WeeklyTrendPoint]
     confidence_distribution: list[ConfidenceBucket]
+    guest_satisfaction_score: float
+    most_affected_cities: list[CityBreakdown]
+    property_health: list[PropertyHealth]
+    host_performance: list[HostPerformance]
+    avg_resolution_time_hours: Optional[float]
+    safety_alerts_open_count: int
+    feature_request_trend: list[WeeklyTrendPoint]
 
 
 class ThemeFrequency(BaseModel):

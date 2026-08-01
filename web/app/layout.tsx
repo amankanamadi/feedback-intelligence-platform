@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Feedback Intelligence Platform",
-  description: "Share feedback and manage customer insights.",
+  title: "Airbnb Guest Experience Intelligence Platform",
+  description: "Understand guest and host feedback at scale, and manage operational insights.",
 };
 
 export default function RootLayout({

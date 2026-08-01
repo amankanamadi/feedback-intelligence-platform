@@ -7,9 +7,9 @@
 // Categorical - main_category has no inherent order or good/bad meaning,
 // so it gets fixed-order categorical hues (never reused for status).
 export const CATEGORY_COLORS: Record<string, string> = {
-  Incident: "#2a78d6", // categorical slot 1 (blue)
-  "Service Request": "#eb6834", // categorical slot 2 (orange)
-  "General Feedback": "#1baf7a", // categorical slot 3 (aqua)
+  "Guest Review": "#2a78d6", // categorical slot 1 (blue)
+  "Host Complaint": "#eb6834", // categorical slot 2 (orange)
+  "Support Ticket": "#1baf7a", // categorical slot 3 (aqua)
 };
 export const CATEGORY_FALLBACK = "#898781";
 

@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
@@ -77,7 +78,8 @@ def client(_db_override):
 
 @pytest.fixture
 def user_client(_db_override):
-    """An independent TestClient authenticated as a regular USER."""
+    """An independent TestClient authenticated as a self-registered GUEST
+    (the default self-registration role - see UserRegister.role)."""
     with TestClient(app) as test_client:
         response = test_client.post(
             "/auth/register", json={"email": "test-user@example.com", "password": "test-password-123"}
@@ -87,35 +89,96 @@ def user_client(_db_override):
 
 
 @pytest.fixture
-def admin_client(_db_override, db_session):
-    """An independent TestClient authenticated as an ADMIN. Admins are
-    never created via self-service registration, so this seeds the row
-    directly via crud, matching how a real admin account would be
-    provisioned out-of-band.
+def host_client(_db_override):
+    """An independent TestClient authenticated as a self-registered HOST -
+    the other submitter-tier role, still scoped to its own feedback like
+    GUEST."""
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/auth/register",
+            json={"email": "test-host@example.com", "password": "test-password-123", "role": "HOST"},
+        )
+        assert response.status_code == 201, response.text
+        yield test_client
+
+
+@contextmanager
+def _make_staff_client(db_session, *, email, role):
+    """Shared helper for the staff-tier fixtures below. Staff accounts are
+    never created via self-service registration (UserRegister rejects any
+    role outside GUEST/HOST), so this seeds the row directly via crud,
+    matching how a real staff account would be provisioned out-of-band.
     """
     from app.core.security import hash_password
     from app.database import crud
-    from app.database.models import Role
 
-    crud.create_user(
-        db_session, email="test-admin@example.com", hashed_password=hash_password("test-password-123"), role=Role.ADMIN
-    )
+    crud.create_user(db_session, email=email, hashed_password=hash_password("test-password-123"), role=role)
     with TestClient(app) as test_client:
-        response = test_client.post(
-            "/auth/login", json={"email": "test-admin@example.com", "password": "test-password-123"}
-        )
+        response = test_client.post("/auth/login", json={"email": email, "password": "test-password-123"})
         assert response.status_code == 200, response.text
         yield test_client
 
 
+@pytest.fixture
+def admin_client(_db_override, db_session):
+    """An independent TestClient authenticated as a SUPPORT_MANAGER - a
+    staff role that is both view-all (STAFF_ROLES) and write-capable
+    (MANAGE_ROLES), so existing tests written against "admin can do
+    everything" keep working unchanged. Kept as `admin_client` (rather
+    than renamed to e.g. `support_manager_client`) since most of the
+    existing suite just needs "some staff account that can read and
+    write", not this specific role.
+    """
+    from app.database.models import Role
+
+    with _make_staff_client(db_session, email="test-admin@example.com", role=Role.SUPPORT_MANAGER) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def ops_manager_client(_db_override, db_session):
+    """Staff + manager tier, like admin_client but under its own distinct
+    role - used by RBAC tests that need two *different* manager identities,
+    or that want to assert OPS_MANAGER specifically (not just "a manager")
+    can write."""
+    from app.database.models import Role
+
+    with _make_staff_client(db_session, email="test-ops-manager@example.com", role=Role.OPS_MANAGER) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def product_manager_client(_db_override, db_session):
+    """Staff tier, view-only: in STAFF_ROLES but not MANAGE_ROLES. Used by
+    RBAC tests asserting that not every staff role can write (PATCH,
+    bulk-upload, export)."""
+    from app.database.models import Role
+
+    with _make_staff_client(
+        db_session, email="test-product-manager@example.com", role=Role.PRODUCT_MANAGER
+    ) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def exec_client(_db_override, db_session):
+    """Staff tier, view-only: in STAFF_ROLES but not MANAGE_ROLES. See
+    product_manager_client - EXEC is the other view-only staff role."""
+    from app.database.models import Role
+
+    with _make_staff_client(db_session, email="test-exec@example.com", role=Role.EXEC) as test_client:
+        yield test_client
+
+
 DEFAULT_CLASSIFICATION = FeedbackClassification(
-    main_category=MainCategory.INCIDENT,
-    sub_category=SubCategory.PERFORMANCE_ISSUE,
+    main_category=MainCategory.GUEST_REVIEW,
+    sub_category=SubCategory.CLEANLINESS,
     sentiment=Sentiment.NEGATIVE,
-    themes=["Slow Dashboard", "Performance"],
+    themes=["Dirty Apartment", "Cleaning Quality"],
     priority=Priority.MEDIUM,
     confidence=95,
-    summary="Customer reports slow dashboard performance.",
+    summary="Guest reports the apartment was not clean on arrival.",
+    recommended_action="Escalate to the property's housekeeping vendor for a re-clean.",
 )
 
 

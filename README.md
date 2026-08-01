@@ -1,8 +1,13 @@
-# AI Customer Feedback Intelligence Platform
+# Airbnb Guest Experience Intelligence Platform
 
-AI-powered customer feedback intelligence system (FastAPI, OpenAI, RAG,
-PostgreSQL + pgvector). See `AI_Customer_Feedback_Intelligence_Architecture.md`
-in the repo root for the full architecture.
+An internal Airbnb operations tool that turns guest reviews, host
+complaints, and support tickets into actionable insight at scale
+(FastAPI, OpenAI, RAG, PostgreSQL + pgvector). Every submission is
+embedded, matched against similar historical feedback via pgvector,
+classified (category, priority, sentiment, themes, confidence,
+summary, and a recommended action) by an LLM, and rolled up into
+dashboards, weekly AI-written operational summaries, and exports for the
+Airbnb operations team.
 
 ## Database: one shared Postgres for both local dev and Docker
 
@@ -42,21 +47,48 @@ curl http://127.0.0.1:8000/health
 The product frontend is the Next.js app in `web/` (see `web/README.md`) -
 it's a separate app on its own origin, not served by this backend.
 
-### Creating an admin account
+### Roles
 
-Every account created via signup/`POST /auth/register` gets the `user`
-role — there's no self-service or scripted way to become an admin (a
-deliberate, currently-unaddressed gap, not an oversight). To get the
-first admin: register a normal account through the app, then promote it
-directly in the database:
+Six roles, in two tiers:
+
+- **Guest** / **Host** — the submitter tier. Chosen at signup
+  (`POST /auth/register` accepts `role: "GUEST" | "HOST"` and rejects
+  anything else). Scoped to their own feedback only.
+- **Customer Support Manager** / **Operations Manager** / **Product
+  Manager** / **Executive Leadership** — the staff tier. All four can view
+  every feedback item, analytics, and the weekly report. Only Support
+  Manager and Ops Manager can edit a case (status/priority/tags/notes/
+  response), bulk-upload, or export — Product Manager and Exec Leadership
+  are view-only.
+
+Staff accounts are never self-registered — promote one directly in the
+database:
 
 ```bash
 docker exec -it feedback-intelligence-platform-db-1 psql -U feedback_app -d feedback_intelligence \
-  -c "UPDATE users SET role = 'ADMIN' WHERE email = 'you@example.com';"
+  -c "UPDATE users SET role = 'SUPPORT_MANAGER' WHERE email = 'you@example.com';"
 ```
 
-(Adjust the container name if it differs - check with `docker compose ps`.
-Log out and back in afterward so a fresh JWT picks up the new role.)
+(Valid staff roles: `SUPPORT_MANAGER`, `OPS_MANAGER`, `PRODUCT_MANAGER`,
+`EXEC`. Adjust the container name if it differs - check with
+`docker compose ps`. Log out and back in afterward so a fresh JWT picks
+up the new role.)
+
+### Demo data
+
+`scripts/seed_synthetic_feedback.py` seeds ~24 properties across a dozen
+cities, provisions one demo account per role, and submits ~150 synthetic
+guest/host feedback items through the real classification pipeline:
+
+```bash
+python scripts/generate_synthetic_feedback.py --per-topic 13   # writes scripts/synthetic_dataset.json
+python scripts/seed_synthetic_feedback.py                      # seeds properties + demo accounts + feedback
+```
+
+Both hit the real OpenAI API (text generation, embeddings, and
+classification), so this costs real API calls and takes a few minutes.
+The seed script prints all 6 demo logins (same password,
+`Demo12345!` by default) at the end.
 
 ### Option B: Fully containerized (backend + frontend + migrations, one command)
 

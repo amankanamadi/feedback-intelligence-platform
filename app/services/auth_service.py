@@ -22,11 +22,13 @@ from app.database.models import Role, User
 logger = logging.getLogger(__name__)
 
 
-def register_user(db: Session, *, email: str, password: str, full_name: str | None) -> User:
+def register_user(db: Session, *, email: str, password: str, full_name: str | None, role: Role) -> User:
     if crud.get_user_by_email(db, email) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
-    # role is never taken from the caller - self-registration is always USER.
-    return crud.create_user(db, email=email, hashed_password=hash_password(password), full_name=full_name, role=Role.USER)
+    # `role` is caller-supplied but constrained to {GUEST, HOST} by
+    # UserRegister's own validation - self-registration can never produce a
+    # staff account.
+    return crud.create_user(db, email=email, hashed_password=hash_password(password), full_name=full_name, role=role)
 
 
 def authenticate(db: Session, *, email: str, password: str) -> User:

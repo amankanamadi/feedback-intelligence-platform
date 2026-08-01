@@ -1,30 +1,30 @@
 [
   {
-    "raw_text": "The mobile app logs me out randomly, sometimes mid-session while I'm entering data.",
+    "raw_text": "The smart lock started beeping non-stop at 2am and we had no idea how to fix it - we finally got the host on the phone after 40 minutes.",
     "source": "Mobile App",
-    "product": "Onboarding",
-    "module": "Uploads",
-    "version": "3.1.0",
-    "region": "US-West"
+    "device": "Samsung Galaxy S23",
+    "platform": "Android",
+    "version": "3.0.0"
   },
   {
-    "raw_text": "It would be great if search results could be filtered by date range."
+    "raw_text": "It would be great if hosts could send us photos directly in the app instead of only text messages."
   },
   {
-    "raw_text": "The new checkout flow is much smoother than before, nice work!",
-    "source": "In-App Widget",
-    "product": "Payments"
+    "raw_text": "Checkout was smooth and the cleaning fee finally matches what's shown before booking - nice fix!",
+    "source": "Website"
   },
   {
-    "raw_text": "Getting a 500 error when I try to integrate the webhook with our Slack channel.",
-    "source": "API",
-    "product": "Analytics",
-    "module": "Notifications",
-    "version": "2.0.0"
+    "raw_text": "Getting a blank white screen every time I try to open my upcoming trip details.",
+    "source": "API"
   },
   {
-    "raw_text": "Is there a way to see historical usage data older than 90 days?",
-    "source": "QR Code",
-    "region": "APAC"
+    "raw_text": "Refund for our cancelled reservation still hasn't shown up on my card after 10 business days.",
+    "source": "Email",
+    "name": "Priya Nair",
+    "email": "priya.nair@example.com"
+  },
+  {
+    "raw_text": "As the host, I want to flag that the previous guest damaged the patio furniture - I have photos ready to share.",
+    "source": "Host Dashboard"
   }
 ]

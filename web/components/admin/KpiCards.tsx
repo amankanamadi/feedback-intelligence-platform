@@ -15,13 +15,19 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
 export function KpiCards({ analytics }: { analytics: AnalyticsSummary }) {
   const tiles: { label: string; value: string | number }[] = [
     { label: "Total feedback", value: analytics.total_feedback },
+    { label: "Guest satisfaction score", value: `${analytics.guest_satisfaction_score}%` },
+    { label: "Safety alerts open", value: analytics.safety_alerts_open_count },
+    {
+      label: "Avg. resolution time",
+      value: analytics.avg_resolution_time_hours !== null ? `${analytics.avg_resolution_time_hours}h` : "-",
+    },
     { label: "Positive", value: `${analytics.positive_pct}%` },
     { label: "Neutral", value: `${analytics.neutral_pct}%` },
     { label: "Negative", value: `${analytics.negative_pct}%` },
-    { label: "Incidents", value: analytics.incidents },
-    { label: "Service requests", value: analytics.service_requests },
-    { label: "General feedback", value: analytics.general_feedback },
     { label: "Avg. confidence", value: analytics.average_confidence !== null ? `${analytics.average_confidence}%` : "-" },
+    { label: "Guest reviews", value: analytics.guest_reviews },
+    { label: "Host complaints", value: analytics.host_complaints },
+    { label: "Support tickets", value: analytics.support_tickets },
   ];
 
   return (

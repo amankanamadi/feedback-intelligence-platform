@@ -12,35 +12,27 @@ EMBEDDING_DIMENSIONS = 1536  # text-embedding-3-small
 
 
 class MainCategory(str, enum.Enum):
-    INCIDENT = "Incident"
-    SERVICE_REQUEST = "Service Request"
-    GENERAL_FEEDBACK = "General Feedback"
+    GUEST_REVIEW = "Guest Review"
+    HOST_COMPLAINT = "Host Complaint"
+    SUPPORT_TICKET = "Support Ticket"
 
 
 class SubCategory(str, enum.Enum):
-    # Incident
-    PRODUCT_BUG = "Product Bug"
-    APPLICATION_CRASH = "Application Crash"
-    LOGIN_ISSUE = "Login Issue"
-    PAYMENT_FAILURE = "Payment Failure"
-    PERFORMANCE_ISSUE = "Performance Issue"
-    SECURITY_ISSUE = "Security Issue"
-    DATA_LOSS = "Data Loss"
-    INTEGRATION_FAILURE = "Integration Failure"
-    # Service Request
-    FEATURE_REQUEST = "Feature Request"
-    UI_UX_IMPROVEMENT = "UI/UX Improvement"
-    DOCUMENTATION_REQUEST = "Documentation Request"
-    API_ENHANCEMENT = "API Enhancement"
-    ACCESSIBILITY_IMPROVEMENT = "Accessibility Improvement"
-    NEW_INTEGRATION = "New Integration"
-    # General Feedback
-    APPRECIATION = "Appreciation"
-    COMPLAINT = "Complaint"
-    PRICING_FEEDBACK = "Pricing Feedback"
-    CUSTOMER_SUPPORT = "Customer Support"
-    QUESTION = "Question"
-    SUGGESTION = "Suggestion"
+    # Guest Review
+    CLEANLINESS = "Cleanliness"
+    WIFI = "WiFi"
+    CHECK_IN = "Check-in"
+    AMENITIES = "Amenities"
+    HOST_COMMUNICATION = "Host Communication"
+    # Host Complaint
+    SAFETY = "Safety"
+    MAINTENANCE = "Maintenance"
+    # Support Ticket
+    BOOKING_EXPERIENCE = "Booking Experience"
+    PAYMENTS = "Payments"
+    REFUNDS = "Refunds"
+    APP_ISSUES = "App Issues"
+    FEATURE_REQUESTS = "Feature Requests"
 
 
 class Sentiment(str, enum.Enum):
@@ -57,14 +49,20 @@ class Priority(str, enum.Enum):
 
 
 class FeedbackSource(str, enum.Enum):
-    WEB_FORM = "Web Form"
-    IN_APP_WIDGET = "In-App Widget"
     MOBILE_APP = "Mobile App"
+    WEBSITE = "Website"
+    POST_STAY_SURVEY = "Post-Stay Survey"
+    HOST_DASHBOARD = "Host Dashboard"
     EMAIL = "Email"
+    SUPPORT_CHAT = "Support Chat"
     API = "API"
-    SURVEY = "Survey"
-    CHATBOT = "Chatbot"
     QR_CODE = "QR Code"
+
+
+class PropertyType(str, enum.Enum):
+    ENTIRE_HOME = "Entire Home"
+    PRIVATE_ROOM = "Private Room"
+    SHARED_ROOM = "Shared Room"
 
 
 class FeedbackStatus(str, enum.Enum):
@@ -112,19 +110,23 @@ class Feedback(Base):
     priority: Mapped[Optional[Priority]] = mapped_column(Enum(Priority, name="priority_enum"))
     confidence: Mapped[Optional[int]]
     summary: Mapped[Optional[str]]
+    # AI-suggested next step for the ops team handling this case, e.g.
+    # "Escalate to housekeeping vendor" or "Send WiFi troubleshooting guide".
+    recommended_action: Mapped[Optional[str]]
     embedding: Mapped[Optional[list[float]]] = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=True)
 
     # Auto-generated immediately after classification - the one AI-adjacent
-    # field a USER-role response is allowed to include, since it's the
-    # submitter's own receipt message, not an analysis internal.
+    # field a submitter-role (Guest/Host) response is allowed to include,
+    # since it's the submitter's own receipt message, not an analysis
+    # internal.
     acknowledgement: Mapped[Optional[str]]
 
-    # Admin workflow fields - never set by AI, only by an admin via
+    # Staff workflow fields - never set by AI, only by staff via
     # PATCH /feedback/{id}.
     status: Mapped[FeedbackStatus] = mapped_column(
         Enum(FeedbackStatus, name="feedback_status_enum"), default=FeedbackStatus.NEW, server_default="NEW"
     )
-    internal_notes: Mapped[Optional[str]]  # admin-only, never in a user-facing schema
+    internal_notes: Mapped[Optional[str]]  # staff-only, never in a submitter-facing schema
     admin_response: Mapped[Optional[str]]  # shown to the submitter once written
     admin_response_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -144,13 +146,15 @@ class Feedback(Base):
     name: Mapped[Optional[str]]
     email: Mapped[Optional[str]]
     source: Mapped[Optional[FeedbackSource]] = mapped_column(Enum(FeedbackSource, name="feedback_source_enum"))
-    product: Mapped[Optional[str]]
-    module: Mapped[Optional[str]]
+    # Which listing this case is about, when applicable (not every case -
+    # e.g. a general app bug report - is tied to a specific property).
+    property_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("properties.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     version: Mapped[Optional[str]]
     device: Mapped[Optional[str]]
     browser: Mapped[Optional[str]]
     platform: Mapped[Optional[str]]
-    region: Mapped[Optional[str]]
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -158,6 +162,7 @@ class Feedback(Base):
     )
 
     submitter: Mapped[Optional["User"]] = relationship(back_populates="feedback_items")
+    property: Mapped[Optional["Property"]] = relationship(back_populates="feedback_items")
     themes: Mapped[list["Theme"]] = relationship(
         secondary=feedback_themes, back_populates="feedback_items"
     )
@@ -165,6 +170,26 @@ class Feedback(Base):
     attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="feedback", cascade="all, delete-orphan"
     )
+
+
+class Property(Base):
+    """A listing that guest reviews, host complaints, and support tickets can reference.
+
+    Static reference data - seeded once, no create/update/delete API. Not
+    linked to a host's User account; `host_name` is descriptive only.
+    """
+
+    __tablename__ = "properties"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    host_name: Mapped[str]
+    city: Mapped[str] = mapped_column(index=True)
+    country: Mapped[str]
+    property_type: Mapped[PropertyType] = mapped_column(Enum(PropertyType, name="property_type_enum"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    feedback_items: Mapped[list["Feedback"]] = relationship(back_populates="property")
 
 
 class Theme(Base):
@@ -212,8 +237,14 @@ class Attachment(Base):
 
 
 class Role(str, enum.Enum):
-    USER = "USER"
-    ADMIN = "ADMIN"
+    # Submitter tier - self-registered, scoped to their own feedback.
+    GUEST = "GUEST"
+    HOST = "HOST"
+    # Staff tier - provisioned by manual promotion, can view all feedback.
+    SUPPORT_MANAGER = "SUPPORT_MANAGER"
+    OPS_MANAGER = "OPS_MANAGER"
+    PRODUCT_MANAGER = "PRODUCT_MANAGER"
+    EXEC = "EXEC"
 
 
 class User(Base):
@@ -223,7 +254,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(unique=True, index=True)
     hashed_password: Mapped[str]
     full_name: Mapped[Optional[str]]
-    role: Mapped[Role] = mapped_column(Enum(Role, name="role_enum"), default=Role.USER, server_default="USER")
+    role: Mapped[Role] = mapped_column(Enum(Role, name="role_enum"), default=Role.GUEST, server_default="GUEST")
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

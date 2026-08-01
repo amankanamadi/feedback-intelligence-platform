@@ -36,30 +36,32 @@ def test_weekly_report_empty_db(admin_client, mock_narrative):
 
 
 def test_weekly_report_reflects_seeded_data(admin_client, db_session, mock_narrative):
-    urgent = crud.create_feedback(db_session, raw_text="Critical login outage.")
+    urgent = crud.create_feedback(db_session, raw_text="No working smoke detector, this is a safety hazard.")
     crud.apply_classification(
         db_session,
         urgent,
-        main_category=MainCategory.INCIDENT,
-        sub_category=SubCategory.LOGIN_ISSUE,
+        main_category=MainCategory.HOST_COMPLAINT,
+        sub_category=SubCategory.SAFETY,
         sentiment=Sentiment.NEGATIVE,
         priority=Priority.CRITICAL,
         confidence=95,
-        summary="Login outage.",
-        theme_names=["Login"],
+        summary="Safety hazard.",
+        theme_names=["Safety"],
+        recommended_action="Escalate to Trust & Safety immediately.",
     )
 
-    happy = crud.create_feedback(db_session, raw_text="Loving the new feature!")
+    happy = crud.create_feedback(db_session, raw_text="Loving this listing, the host was amazing!")
     crud.apply_classification(
         db_session,
         happy,
-        main_category=MainCategory.GENERAL_FEEDBACK,
-        sub_category=SubCategory.APPRECIATION,
+        main_category=MainCategory.GUEST_REVIEW,
+        sub_category=SubCategory.HOST_COMMUNICATION,
         sentiment=Sentiment.POSITIVE,
         priority=Priority.LOW,
         confidence=95,
         summary="Appreciation.",
-        theme_names=["Feature Love"],
+        theme_names=["Host Praise"],
+        recommended_action="Share the positive feedback with the host.",
     )
 
     response = admin_client.get("/reports/weekly")
@@ -68,9 +70,9 @@ def test_weekly_report_reflects_seeded_data(admin_client, db_session, mock_narra
     body = response.json()
     assert body["metrics"]["total_feedback"] == 2
     assert len(body["top_concerns"]) == 1
-    assert body["top_concerns"][0]["raw_text"] == "Critical login outage."
+    assert body["top_concerns"][0]["raw_text"] == "No working smoke detector, this is a safety hazard."
     assert len(body["positive_highlights"]) == 1
-    assert body["positive_highlights"][0]["raw_text"] == "Loving the new feature!"
+    assert body["positive_highlights"][0]["raw_text"] == "Loving this listing, the host was amazing!"
 
 
 def test_weekly_report_degrades_gracefully_when_narrative_fails(admin_client, mock_narrative):

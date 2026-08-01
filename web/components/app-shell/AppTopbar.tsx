@@ -5,6 +5,7 @@ import { LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useLogoutMutation } from "@/hooks/use-logout";
+import { ROLE_LABELS } from "@/types/auth";
 
 export function AppTopbar({ onMenuClick }: { onMenuClick: () => void }) {
   const router = useRouter();
@@ -33,7 +34,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick: () => void }) {
         {user && (
           <div className="text-right">
             <p className="text-sm font-medium text-foreground">{user.full_name ?? user.email}</p>
-            <p className="text-xs text-muted-foreground">{user.role === "ADMIN" ? "Administrator" : "Member"}</p>
+            <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</p>
           </div>
         )}
         <Button variant="outline" size="sm" onClick={handleLogout} isLoading={logoutMutation.isPending}>

@@ -10,6 +10,7 @@ import { FeedbackDetailUser } from "@/components/feedback/FeedbackDetailUser";
 import { useFeedbackDetail } from "@/hooks/use-feedback-detail";
 import { useAuth } from "@/lib/auth";
 import type { FeedbackAdmin, FeedbackUser } from "@/types/feedback";
+import { STAFF_ROLES } from "@/types/auth";
 
 export default function FeedbackDetailPage() {
   const params = useParams<{ id: string }>();
@@ -30,7 +31,7 @@ export default function FeedbackDetailPage() {
   return (
     <DataState query={query} skeleton={<DetailSkeleton />}>
       {(feedback) =>
-        user?.role === "ADMIN" ? (
+        !!user && STAFF_ROLES.includes(user.role) ? (
           <FeedbackDetailAdmin feedback={feedback as FeedbackAdmin} />
         ) : (
           <FeedbackDetailUser feedback={feedback as FeedbackUser} />

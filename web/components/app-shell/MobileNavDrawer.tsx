@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { MessageSquareHeart, X } from "lucide-react";
+import { Home, X } from "lucide-react";
 import { SidebarNav } from "@/components/app-shell/SidebarNav";
 import { Button } from "@/components/ui/button";
 
@@ -26,8 +26,11 @@ export function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () 
       <div role="dialog" aria-modal="true" aria-label="Navigation" className="absolute inset-y-0 left-0 flex w-64 flex-col bg-card">
         <div className="flex items-center justify-between px-4 py-5">
           <div className="flex items-center gap-2 font-semibold text-foreground">
-            <MessageSquareHeart className="size-6 text-primary" aria-hidden="true" />
-            Feedback Intelligence
+            <Home className="size-6 text-primary" aria-hidden="true" />
+            <span className="leading-tight">
+              Airbnb
+              <span className="block text-xs font-medium text-muted-foreground">Guest Experience Intelligence</span>
+            </span>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close navigation">
             <X className="size-4" />

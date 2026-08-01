@@ -8,8 +8,19 @@ import type { FeedbackUser } from "@/types/feedback";
 // the object into JSX, so a stray backend field can't leak through even
 // if the API ever over-returns for a USER-role caller.
 export function FeedbackDetailUser({ feedback }: { feedback: FeedbackUser }) {
-  const { id, raw_text, status, acknowledgement, admin_response, admin_response_at, attachments, created_at, updated_at } =
-    feedback;
+  const {
+    id,
+    raw_text,
+    status,
+    acknowledgement,
+    admin_response,
+    admin_response_at,
+    attachments,
+    property_name,
+    property_city,
+    created_at,
+    updated_at,
+  } = feedback;
 
   return (
     <div className="flex flex-col gap-4">
@@ -31,6 +42,15 @@ export function FeedbackDetailUser({ feedback }: { feedback: FeedbackUser }) {
               <dt>Last updated</dt>
               <dd className="text-foreground">{formatDateTime(updated_at)}</dd>
             </div>
+            {property_name && (
+              <div>
+                <dt>Listing</dt>
+                <dd className="text-foreground">
+                  {property_name}
+                  {property_city ? ` — ${property_city}` : ""}
+                </dd>
+              </div>
+            )}
           </dl>
         </CardContent>
       </Card>

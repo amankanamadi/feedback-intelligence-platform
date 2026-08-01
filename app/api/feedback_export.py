@@ -12,7 +12,7 @@ from app.database import crud
 from app.database.models import Feedback, FeedbackSource, MainCategory, Sentiment, User
 from app.database.session import get_db
 from app.core.config import get_settings
-from app.core.security import RequireAdmin
+from app.core.security import RequireManager
 
 router = APIRouter(tags=["feedback"])
 
@@ -25,18 +25,18 @@ _CSV_COLUMNS = [
     "priority",
     "confidence",
     "summary",
+    "recommended_action",
     "themes",
     "submitter_user_id_legacy",
     "name",
     "email",
     "source",
-    "product",
-    "module",
+    "property_name",
+    "property_city",
     "version",
     "device",
     "browser",
     "platform",
-    "region",
     "attachment_count",
     "created_at",
     "updated_at",
@@ -57,18 +57,18 @@ def _feedback_to_csv_row(item: Feedback) -> list:
         _value(item.priority),
         item.confidence,
         item.summary,
+        item.recommended_action,
         "; ".join(theme.name for theme in item.themes),
         item.submitter_user_id_legacy,
         item.name,
         item.email,
         _value(item.source),
-        item.product,
-        item.module,
+        item.property.name if item.property else None,
+        item.property.city if item.property else None,
         item.version,
         item.device,
         item.browser,
         item.platform,
-        item.region,
         len(item.attachments),
         item.created_at.isoformat() if item.created_at else None,
         item.updated_at.isoformat() if item.updated_at else None,
@@ -81,7 +81,7 @@ def _fetch_items(
     sentiment: Optional[Sentiment],
     search: Optional[str],
     source: Optional[FeedbackSource],
-    product: Optional[str],
+    property_id: Optional[int],
 ) -> list[Feedback]:
     settings = get_settings()
     return crud.list_feedback(
@@ -91,7 +91,7 @@ def _fetch_items(
         sentiment=sentiment,
         search=search,
         source=source,
-        product=product,
+        property_id=property_id,
     )
 
 
@@ -101,11 +101,11 @@ def export_feedback_csv(
     sentiment: Optional[Sentiment] = Query(None),
     search: Optional[str] = Query(None, min_length=1, max_length=200),
     source: Optional[FeedbackSource] = Query(None),
-    product: Optional[str] = Query(None, min_length=1, max_length=100),
-    current_user: User = Depends(RequireAdmin),
+    property_id: Optional[int] = Query(None),
+    current_user: User = Depends(RequireManager),
     db: Session = Depends(get_db),
 ) -> Response:
-    items = _fetch_items(db, main_category, sentiment, search, source, product)
+    items = _fetch_items(db, main_category, sentiment, search, source, property_id)
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -159,8 +159,19 @@ def _build_feedback_pdf(items: list[Feedback]) -> bytes:
     pdf.ln(4)
 
     pdf.set_font("helvetica", size=8)
-    headers = ["ID", "Feedback", "Source", "Product", "Category", "Sentiment", "Priority", "Confidence", "Created"]
-    with pdf.table(col_widths=(8, 30, 12, 12, 14, 10, 9, 9, 12)) as table:
+    headers = [
+        "ID",
+        "Feedback",
+        "Source",
+        "Property",
+        "Category",
+        "Sentiment",
+        "Priority",
+        "Confidence",
+        "Recommended Action",
+        "Created",
+    ]
+    with pdf.table(col_widths=(8, 24, 10, 16, 12, 9, 8, 8, 20, 10)) as table:
         header_row = table.row()
         for header in headers:
             header_row.cell(header)
@@ -169,11 +180,12 @@ def _build_feedback_pdf(items: list[Feedback]) -> bytes:
             row.cell(str(item.id))
             row.cell(_pdf_safe_text(item.raw_text[:60]))
             row.cell(_pdf_safe_text(_value(item.source) or "-"))
-            row.cell(_pdf_safe_text(item.product or "-"))
+            row.cell(_pdf_safe_text(f"{item.property.name} ({item.property.city})" if item.property else "-"))
             row.cell(_pdf_safe_text(_value(item.main_category) or "-"))
             row.cell(_pdf_safe_text(_value(item.sentiment) or "-"))
             row.cell(_pdf_safe_text(_value(item.priority) or "-"))
             row.cell(str(item.confidence) if item.confidence is not None else "-")
+            row.cell(_pdf_safe_text((item.recommended_action or "-")[:60]))
             row.cell(item.created_at.strftime("%Y-%m-%d") if item.created_at else "-")
 
     return bytes(pdf.output())
@@ -185,11 +197,11 @@ def export_feedback_pdf(
     sentiment: Optional[Sentiment] = Query(None),
     search: Optional[str] = Query(None, min_length=1, max_length=200),
     source: Optional[FeedbackSource] = Query(None),
-    product: Optional[str] = Query(None, min_length=1, max_length=100),
-    current_user: User = Depends(RequireAdmin),
+    property_id: Optional[int] = Query(None),
+    current_user: User = Depends(RequireManager),
     db: Session = Depends(get_db),
 ) -> Response:
-    items = _fetch_items(db, main_category, sentiment, search, source, product)
+    items = _fetch_items(db, main_category, sentiment, search, source, property_id)
     pdf_bytes = _build_feedback_pdf(items)
 
     return Response(

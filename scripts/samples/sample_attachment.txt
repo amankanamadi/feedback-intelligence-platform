@@ -1,8 +1,12 @@
-2026-07-28 09:14:02 ERROR  ExportService  Failed to render report as PDF
-2026-07-28 09:14:02 ERROR  ExportService  java.lang.NullPointerException: template reference is null
-	at com.feedbackplatform.export.PdfRenderer.render(PdfRenderer.java:88)
-	at com.feedbackplatform.export.ExportService.export(ExportService.java:41)
-	at com.feedbackplatform.api.ReportController.downloadPdf(ReportController.java:67)
-2026-07-28 09:14:02 INFO   ExportService  Retrying export (attempt 2 of 3)
-2026-07-28 09:14:03 ERROR  ExportService  Retry failed with same error
-2026-07-28 09:14:03 INFO   ExportService  Export marked as failed, notifying user
+Photo notes attached to damage report - Sunset Loft, Unit 4B
+Submitted by host, 2026-07-28
+
+- IMG_0142.jpg: Living room rug, large red stain (approx. 18in), not present at
+  check-in per turnover photos from previous clean.
+- IMG_0143.jpg: Patio chair, left armrest snapped clean off.
+- IMG_0144.jpg: Bathroom mirror, hairline crack across bottom-left corner.
+- IMG_0145.jpg: Kitchen counter, cigarette burn mark near the stovetop
+  (listing is marked non-smoking).
+
+Requesting a damage claim be opened against the most recent guest's
+reservation and the security deposit charged accordingly.

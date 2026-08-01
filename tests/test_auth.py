@@ -18,11 +18,47 @@ def test_register_creates_user_and_sets_cookies(client):
     assert response.status_code == 201
     body = response.json()
     assert body["email"] == "user@example.com"
-    assert body["role"] == "USER"
+    assert body["role"] == "GUEST"
     assert body["is_active"] is True
     assert "hashed_password" not in body
     assert "access_token" in response.cookies
     assert "refresh_token" in response.cookies
+
+
+def test_register_as_host_sets_host_role(client):
+    response = client.post(
+        "/auth/register",
+        json={"email": "host@example.com", "password": VALID_PASSWORD, "role": "HOST"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["role"] == "HOST"
+
+
+def test_register_rejects_self_registration_as_staff_role(client):
+    response = client.post(
+        "/auth/register",
+        json={"email": "sneaky@example.com", "password": VALID_PASSWORD, "role": "SUPPORT_MANAGER"},
+    )
+
+    assert response.status_code == 422
+
+    # Confirm no account was created despite the rejected request.
+    login_attempt = client.post("/auth/login", json={"email": "sneaky@example.com", "password": VALID_PASSWORD})
+    assert login_attempt.status_code == 401
+
+
+def test_register_rejects_every_non_self_registerable_role(client):
+    for role, email in [
+        ("SUPPORT_MANAGER", "a@example.com"),
+        ("OPS_MANAGER", "b@example.com"),
+        ("PRODUCT_MANAGER", "c@example.com"),
+        ("EXEC", "d@example.com"),
+    ]:
+        response = client.post(
+            "/auth/register", json={"email": email, "password": VALID_PASSWORD, "role": role}
+        )
+        assert response.status_code == 422, f"role {role} should have been rejected"
 
 
 def test_register_duplicate_email_conflicts(client):
@@ -38,7 +74,7 @@ def test_login_success_returns_role_and_sets_cookies(client):
     response = client.post("/auth/login", json={"email": "user@example.com", "password": VALID_PASSWORD})
 
     assert response.status_code == 200
-    assert response.json()["role"] == "USER"
+    assert response.json()["role"] == "GUEST"
     assert "access_token" in response.cookies
 
 
@@ -66,15 +102,18 @@ def test_login_inactive_account_is_forbidden(client, db_session):
     assert response.status_code == 403
 
 
-def test_admin_user_logs_in_with_admin_role(client, db_session):
+def test_staff_user_logs_in_with_staff_role(client, db_session):
     crud.create_user(
-        db_session, email="admin@example.com", hashed_password=hash_password(VALID_PASSWORD), role=Role.ADMIN
+        db_session,
+        email="manager@example.com",
+        hashed_password=hash_password(VALID_PASSWORD),
+        role=Role.SUPPORT_MANAGER,
     )
 
-    response = client.post("/auth/login", json={"email": "admin@example.com", "password": VALID_PASSWORD})
+    response = client.post("/auth/login", json={"email": "manager@example.com", "password": VALID_PASSWORD})
 
     assert response.status_code == 200
-    assert response.json()["role"] == "ADMIN"
+    assert response.json()["role"] == "SUPPORT_MANAGER"
 
 
 def test_me_requires_authentication(client):

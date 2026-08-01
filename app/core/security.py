@@ -112,11 +112,20 @@ def require_role(*roles: Role):
     return dependency
 
 
-RequireAdmin = require_role(Role.ADMIN)
+# Staff tier - provisioned by manual DB promotion, never self-registered.
+# Can view every feedback row, analytics, and the weekly report.
+STAFF_ROLES = frozenset({Role.SUPPORT_MANAGER, Role.OPS_MANAGER, Role.PRODUCT_MANAGER, Role.EXEC})
+
+# Subset of STAFF_ROLES that can also write: PATCH feedback, bulk-upload,
+# and export CSV/PDF. PRODUCT_MANAGER and EXEC are view-only within staff.
+MANAGE_ROLES = frozenset({Role.SUPPORT_MANAGER, Role.OPS_MANAGER})
+
+RequireStaff = require_role(*STAFF_ROLES)
+RequireManager = require_role(*MANAGE_ROLES)
 
 
-def assert_owns_or_admin(owner_user_id: Optional[int], current_user: User) -> None:
-    if current_user.role == Role.ADMIN:
+def assert_owns_or_staff(owner_user_id: Optional[int], current_user: User) -> None:
+    if current_user.role in STAFF_ROLES:
         return
     if owner_user_id is None or owner_user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")

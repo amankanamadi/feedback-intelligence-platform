@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { STAFF_ROLES } from "@/types/auth";
 
 type NavItem = {
   href: string;
@@ -24,12 +25,12 @@ type NavItem = {
 
 type NavGroup = {
   label?: string;
-  adminOnly?: boolean;
+  staffOnly?: boolean;
   items: NavItem[];
 };
 
-// One nav list for everyone - admin-only groups simply don't render for a
-// USER, rather than living in a separate portal/route tree.
+// One nav list for everyone - staff-only groups simply don't render for a
+// Guest/Host, rather than living in a separate portal/route tree.
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
@@ -40,18 +41,18 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Analytics",
-    adminOnly: true,
+    staffOnly: true,
     items: [
       { href: "/app/analytics", label: "Dashboard", icon: BarChart3 },
       { href: "/app/reports/weekly", label: "Weekly Report", icon: FileClock },
     ],
   },
   {
-    label: "Administration",
-    adminOnly: true,
+    label: "Operations",
+    staffOnly: true,
     items: [
       { href: "/app/users", label: "Users", icon: Users },
-      { href: "/app/categories", label: "Categories", icon: Tags },
+      { href: "/app/categories", label: "Category Taxonomy", icon: Tags },
       { href: "/app/ai-config", label: "AI Configuration", icon: Sliders },
       { href: "/app/settings", label: "System Settings", icon: Settings },
       { href: "/app/audit-logs", label: "Audit Logs", icon: FileClock },
@@ -72,12 +73,12 @@ function findActiveHref(pathname: string): string | null {
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { user } = useAuth();
-  const isAdmin = user?.role === "ADMIN";
+  const isStaff = !!user && STAFF_ROLES.includes(user.role);
   const activeHref = findActiveHref(pathname);
 
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 pb-6">
-      {NAV_GROUPS.filter((group) => !group.adminOnly || isAdmin).map((group, index) => (
+      {NAV_GROUPS.filter((group) => !group.staffOnly || isStaff).map((group, index) => (
         <div key={group.label ?? index} className="flex flex-col gap-1">
           {group.label && (
             <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>

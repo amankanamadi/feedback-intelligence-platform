@@ -6,24 +6,29 @@ from app.ai.structured_output import get_structured_completion
 from app.analytics.schemas import AnalyticsSummary
 from app.database.models import Feedback
 
-SYSTEM_PROMPT = """You are a business analyst producing a concise weekly executive
-summary of customer feedback for company leadership.
+SYSTEM_PROMPT = """You are an operations analyst producing a concise weekly operational
+summary of guest and host feedback for an Airbnb-style short-term rental platform's
+leadership team.
 
 You will be given, for the reporting period:
 - Aggregate metrics that have already been computed correctly - treat these as
   ground truth. Do not recompute them, do not restate exact figures repeatedly,
   and do not invent any numbers that are not given to you.
-- A small sample of top-priority concerns and positive highlights from that period.
+- A small sample of top-priority concerns (e.g. safety alerts, maintenance
+  issues, refund escalations) and positive highlights (e.g. glowing guest
+  reviews, host communication praise) from that period.
 
 Produce:
 - executive_summary: 2-4 sentences giving leadership the big picture (volume,
-  sentiment trend, most pressing category), in plain business language.
+  sentiment trend, most pressing category - e.g. a spike in cleanliness
+  complaints in a particular city, or a safety issue trend), in plain
+  business language.
 - key_wins: 1-3 short bullet points on what is going well, grounded in the
   provided positive highlights.
 - key_concerns: 1-3 short bullet points on the most pressing issues, grounded in
   the provided top concerns.
-- recommended_actions: 1-3 short, concrete, actionable next steps a product or
-  support leader could take this week.
+- recommended_actions: 1-3 short, concrete, actionable next steps an ops or
+  product leader could take this week.
 
 Synthesize and prioritize; do not simply restate the raw data back verbatim.
 """ + PROMPT_INJECTION_GUARD
@@ -34,8 +39,8 @@ def _format_metrics(metrics: AnalyticsSummary) -> str:
         f"Total feedback: {metrics.total_feedback} ({metrics.classified_feedback} classified)",
         f"Sentiment: {metrics.positive_pct}% Positive, {metrics.neutral_pct}% Neutral, "
         f"{metrics.negative_pct}% Negative",
-        f"Categories: {metrics.incidents} Incidents, {metrics.service_requests} Service Requests, "
-        f"{metrics.general_feedback} General Feedback",
+        f"Categories: {metrics.guest_reviews} Guest Reviews, {metrics.host_complaints} Host "
+        f"Complaints, {metrics.support_tickets} Support Tickets",
     ]
     if metrics.average_confidence is not None:
         lines.append(f"Average classification confidence: {metrics.average_confidence}%")
@@ -72,28 +77,29 @@ def build_report_context(
 _EXAMPLE_CONTEXT = (
     "Total feedback: 20 (19 classified)\n"
     "Sentiment: 40.0% Positive, 25.0% Neutral, 35.0% Negative\n"
-    "Categories: 9 Incidents, 6 Service Requests, 5 General Feedback\n"
+    "Categories: 9 Guest Reviews, 6 Host Complaints, 5 Support Tickets\n"
     "Average classification confidence: 90.0%\n\n"
     "Top concerns (high/critical priority):\n"
-    '- [Incident / Performance Issue / Negative / High] "The dashboard has been unusably slow all week."\n'
-    '- [Incident / Login Issue / Negative / High] "Cannot log in on mobile since the update."\n\n'
+    '- [Host Complaint / Safety / Negative / Critical] "The front door lock has been broken for two days."\n'
+    '- [Guest Review / Cleanliness / Negative / High] "The apartment was filthy when we arrived."\n\n'
     "Positive highlights:\n"
-    '- [General Feedback / Appreciation / Positive] "Support resolved my billing issue in minutes."'
+    '- [Guest Review / Host Communication / Positive] "Our host fixed the check-in issue within minutes."'
 )
 
 _EXAMPLE_OUTPUT = WeeklyNarrative(
     executive_summary=(
         "Feedback volume held steady this week with a mild negative tilt, driven mainly by "
-        "recurring performance and login incidents. Support quality continues to be a bright spot."
+        "a recurring cleanliness complaint and a critical safety report at one property. "
+        "Guests continue to praise host responsiveness."
     ),
-    key_wins=["Customer support response times continue to earn praise."],
+    key_wins=["Host communication and responsiveness continue to earn praise from guests."],
     key_concerns=[
-        "Dashboard performance complaints recurred throughout the week.",
-        "A post-update login issue is affecting mobile users.",
+        "A broken door lock left a property unsecured and was flagged as a critical safety issue.",
+        "Cleanliness complaints recurred at more than one listing this week.",
     ],
     recommended_actions=[
-        "Prioritize investigating the mobile login regression introduced by the recent update.",
-        "Schedule a performance review of the dashboard's slowest-loading views.",
+        "Dispatch a locksmith to the affected property today and confirm the fix with Trust & Safety.",
+        "Follow up with the housekeeping vendors tied to this week's cleanliness complaints.",
     ],
 ).model_dump_json()
 

@@ -13,9 +13,16 @@ class FeedbackClassification(BaseModel):
     priority: Priority
     confidence: int = Field(ge=0, le=100)
     summary: str
+    # One-sentence, concrete next step for the ops team handling this case,
+    # e.g. "Escalate to housekeeping vendor for next-day deep clean."
+    recommended_action: str
 
 
 class WeeklyNarrative(BaseModel):
+    """Structured output for the weekly operational summary shown to
+    leadership, synthesized from pre-computed metrics and a sample of
+    top-priority concerns and positive highlights for the period."""
+
     executive_summary: str
     key_wins: list[str]
     key_concerns: list[str]

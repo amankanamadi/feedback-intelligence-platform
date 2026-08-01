@@ -26,67 +26,54 @@ CRITICAL_OVERRIDE = (
 HIGH_PRIORITY_OVERRIDE = "We've flagged this as high priority and our team will follow up as soon as possible."
 
 _SUBCATEGORY_TEMPLATES: dict[SubCategory, str] = {
-    # Bug Report / Incident-flavored subcategories
-    SubCategory.PRODUCT_BUG: (
-        "Thank you for reporting this issue. Our engineering team has received your report "
-        "and will investigate it as soon as possible."
+    # Guest Review subcategories
+    SubCategory.CLEANLINESS: (
+        "Thanks for letting us know about the cleanliness issue - we've flagged this with the "
+        "property's cleaning team and someone will follow up shortly."
     ),
-    SubCategory.APPLICATION_CRASH: (
-        "Thank you for reporting this issue. Our engineering team has received your report "
-        "and will investigate it as soon as possible."
+    SubCategory.WIFI: (
+        "Sorry about the WiFi trouble - we've passed this along to the host and our team will "
+        "help get it sorted."
     ),
-    SubCategory.LOGIN_ISSUE: (
-        "Sorry you're having trouble logging in - our team has been notified and is looking into it."
+    SubCategory.CHECK_IN: (
+        "Sorry you had trouble checking in - we've notified the host and our team is looking "
+        "into it right away."
     ),
-    SubCategory.PAYMENT_FAILURE: (
-        "We've received your billing report and a specialist will follow up with you shortly."
+    SubCategory.AMENITIES: (
+        "Thanks for flagging the issue with the listing's amenities - we've shared this with the "
+        "host and our team will follow up."
     ),
-    SubCategory.PERFORMANCE_ISSUE: "Thanks for flagging the performance issue - we're looking into it.",
-    SubCategory.SECURITY_ISSUE: (
-        "Thank you for reporting this security concern. Our team has been notified and will "
-        "investigate immediately."
+    SubCategory.HOST_COMMUNICATION: (
+        "Thanks for sharing this - we've passed your feedback about the host's communication "
+        "along to our team."
     ),
-    SubCategory.DATA_LOSS: (
-        "Thank you for reporting this issue. Our engineering team has received your report "
-        "and will investigate it as soon as possible."
+    # Host Complaint subcategories
+    SubCategory.SAFETY: (
+        "Thank you for reporting this safety concern. Our Trust & Safety team has been notified "
+        "and will investigate immediately."
     ),
-    SubCategory.INTEGRATION_FAILURE: (
-        "Thank you for reporting this issue. Our engineering team has received your report "
-        "and will investigate it as soon as possible."
+    SubCategory.MAINTENANCE: (
+        "Thanks for reporting this - our team has logged the maintenance issue and will follow "
+        "up on next steps shortly."
     ),
-    # Service Request subcategories
-    SubCategory.FEATURE_REQUEST: (
+    # Support Ticket subcategories
+    SubCategory.BOOKING_EXPERIENCE: (
+        "Sorry about the trouble with your booking - our support team has received your report "
+        "and will follow up soon."
+    ),
+    SubCategory.PAYMENTS: (
+        "We've received your payment report and a specialist will follow up with you shortly."
+    ),
+    SubCategory.REFUNDS: (
+        "We've received your refund request and our payments team will follow up with an update soon."
+    ),
+    SubCategory.APP_ISSUES: (
+        "Thank you for reporting this issue. Our engineering team has received your report and "
+        "will investigate it as soon as possible."
+    ),
+    SubCategory.FEATURE_REQUESTS: (
         "Thank you for your suggestion! Your feature request has been recorded and will be "
         "reviewed by our product team during future planning."
-    ),
-    SubCategory.UI_UX_IMPROVEMENT: (
-        "Thank you for your suggestion! Your feedback has been recorded and will be reviewed "
-        "by our product team during future planning."
-    ),
-    SubCategory.DOCUMENTATION_REQUEST: (
-        "Thanks for the suggestion - we've passed this along to the team responsible for our documentation."
-    ),
-    SubCategory.API_ENHANCEMENT: (
-        "Thank you for your suggestion! Your feature request has been recorded and will be "
-        "reviewed by our product team during future planning."
-    ),
-    SubCategory.ACCESSIBILITY_IMPROVEMENT: (
-        "Thank you for your suggestion! Your feedback has been recorded and will be reviewed "
-        "by our product team during future planning."
-    ),
-    SubCategory.NEW_INTEGRATION: (
-        "Thank you for your suggestion! Your feature request has been recorded and will be "
-        "reviewed by our product team during future planning."
-    ),
-    # General Feedback subcategories
-    SubCategory.APPRECIATION: "Thank you for your kind words! Your feedback motivates our team to continue improving.",
-    SubCategory.COMPLAINT: "We're sorry to hear about your experience. Your concern has been recorded and our team will carefully review it.",
-    SubCategory.PRICING_FEEDBACK: "Thank you for sharing your thoughts on pricing - we've passed this along to the team.",
-    SubCategory.CUSTOMER_SUPPORT: "Thank you for the feedback on your support experience - we've shared it with the team.",
-    SubCategory.QUESTION: "Thanks for reaching out - our team will get back to you with an answer soon.",
-    SubCategory.SUGGESTION: (
-        "Thank you for your suggestion! Your feedback has been recorded and will be reviewed "
-        "by our product team during future planning."
     ),
 }
 

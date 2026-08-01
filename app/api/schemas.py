@@ -15,13 +15,10 @@ _METADATA_TEXT_FIELDS = (
     "submitter_user_id_legacy",
     "name",
     "email",
-    "product",
-    "module",
     "version",
     "device",
     "browser",
     "platform",
-    "region",
 )
 
 
@@ -35,13 +32,14 @@ class FeedbackCreate(BaseModel):
     name: Optional[str] = Field(None, max_length=200)
     email: Optional[str] = Field(None, max_length=320)  # RFC 5321 max mailbox length
     source: Optional[FeedbackSource] = None
-    product: Optional[str] = Field(None, max_length=100)
-    module: Optional[str] = Field(None, max_length=100)
+    # Which listing this feedback is about, when applicable - validated
+    # against Property in the router (404 if it doesn't reference a real
+    # row), not here, since that requires a DB lookup.
+    property_id: Optional[int] = None
     version: Optional[str] = Field(None, max_length=50)
     device: Optional[str] = Field(None, max_length=100)
     browser: Optional[str] = Field(None, max_length=100)
     platform: Optional[str] = Field(None, max_length=100)
-    region: Optional[str] = Field(None, max_length=100)
 
     @field_validator("raw_text")
     @classmethod
@@ -73,15 +71,15 @@ class AttachmentRead(BaseModel):
     created_at: datetime
 
 
-class FeedbackUserRead(BaseModel):
-    """Shape returned to a USER-role caller viewing their own feedback.
+class FeedbackSubmitterRead(BaseModel):
+    """Shape returned to a GUEST/HOST-role caller viewing their own feedback.
 
     Deliberately excludes every AI-analysis field (category, subcategory,
-    sentiment, confidence, themes, summary) and admin-only fields
-    (internal_notes, tags) - the router constructs this model explicitly
-    rather than relying on a shared response_model, so those attributes
-    are never even read off the ORM object for a USER-role response, let
-    alone serialized.
+    sentiment, confidence, themes, summary, recommended_action) and
+    staff-only fields (internal_notes, tags) - the router constructs this
+    model explicitly rather than relying on a shared response_model, so
+    those attributes are never even read off the ORM object for a
+    submitter-role response, let alone serialized.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -94,8 +92,12 @@ class FeedbackUserRead(BaseModel):
     admin_response_at: Optional[datetime] = None
     attachments: list[AttachmentRead] = []
     source: Optional[str] = None
-    product: Optional[str] = None
-    module: Optional[str] = None
+    property_id: Optional[int] = None
+    # Lightweight property summary for display - populated by the router
+    # from `feedback.property` after model_validate, since it isn't a
+    # direct attribute on Feedback.
+    property_name: Optional[str] = None
+    property_city: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -105,9 +107,9 @@ class FeedbackUserRead(BaseModel):
         return v.value if isinstance(v, enum.Enum) else v
 
 
-class FeedbackAdminRead(FeedbackUserRead):
-    """Shape returned to an ADMIN-role caller - everything a user sees,
-    plus AI analysis results and admin-only workflow fields."""
+class FeedbackStaffRead(FeedbackSubmitterRead):
+    """Shape returned to a STAFF-role caller - everything a submitter sees,
+    plus AI analysis results and staff-only workflow fields."""
 
     main_category: Optional[str] = None
     sub_category: Optional[str] = None
@@ -115,6 +117,9 @@ class FeedbackAdminRead(FeedbackUserRead):
     priority: Optional[str] = None
     confidence: Optional[int] = None
     summary: Optional[str] = None
+    # AI-suggested next step for the ops team - internal, never shown to
+    # the submitter, hence absent from FeedbackSubmitterRead.
+    recommended_action: Optional[str] = None
     themes: list[str] = []
     tags: list[str] = []
     internal_notes: Optional[str] = None
@@ -126,7 +131,6 @@ class FeedbackAdminRead(FeedbackUserRead):
     device: Optional[str] = None
     browser: Optional[str] = None
     platform: Optional[str] = None
-    region: Optional[str] = None
 
     @field_validator("main_category", "sub_category", "sentiment", "priority", mode="before")
     @classmethod
@@ -157,3 +161,21 @@ class FeedbackAdminUpdate(BaseModel):
         if v is None:
             return v
         return [sanitize_optional_text(tag) for tag in v if sanitize_optional_text(tag)]
+
+
+class PropertyRead(BaseModel):
+    """Static reference data - read-only, no create/update/delete API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    host_name: str
+    city: str
+    country: str
+    property_type: str
+
+    @field_validator("property_type", mode="before")
+    @classmethod
+    def _enum_to_value(cls, v):
+        return v.value if isinstance(v, enum.Enum) else v

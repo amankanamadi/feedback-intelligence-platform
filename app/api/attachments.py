@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.schemas import AttachmentRead
 from app.core.config import get_settings
-from app.core.security import assert_owns_or_admin, get_current_user
+from app.core.security import assert_owns_or_staff, get_current_user
 from app.database import crud
 from app.database.models import User
 from app.database.session import get_db
@@ -36,7 +36,7 @@ async def upload_attachments(
     feedback = crud.get_feedback(db, feedback_id)
     if feedback is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
-    assert_owns_or_admin(feedback.user_id, current_user)
+    assert_owns_or_staff(feedback.user_id, current_user)
 
     if not files:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="At least one file is required.")
@@ -99,7 +99,7 @@ def download_attachment(
     attachment = crud.get_attachment(db, attachment_id)
     if attachment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
-    assert_owns_or_admin(attachment.feedback.user_id, current_user)
+    assert_owns_or_staff(attachment.feedback.user_id, current_user)
 
     path = Path(attachment.storage_path)
     if not path.exists():

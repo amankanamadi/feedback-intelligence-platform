@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "AI Customer Feedback Intelligence Platform"
+    app_name: str = "Airbnb Guest Experience Intelligence Platform"
     debug: bool = False
     api_port: int = 8000
 

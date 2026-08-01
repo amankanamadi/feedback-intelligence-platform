@@ -7,17 +7,31 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.api.sanitization import sanitize_optional_text
+from app.database.models import Role
+
+# Self-registration is only ever the submitter tier - GUEST or HOST. The
+# staff tier (SUPPORT_MANAGER/OPS_MANAGER/PRODUCT_MANAGER/EXEC) is
+# provisioned by manual DB promotion, never through this endpoint.
+SELF_REGISTERABLE_ROLES = frozenset({Role.GUEST, Role.HOST})
 
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     full_name: Optional[str] = Field(None, max_length=200)
+    role: Role = Role.GUEST
 
     @field_validator("full_name", mode="before")
     @classmethod
     def _sanitize(cls, v):
         return sanitize_optional_text(v)
+
+    @field_validator("role")
+    @classmethod
+    def _validate_self_registerable(cls, v: Role) -> Role:
+        if v not in SELF_REGISTERABLE_ROLES:
+            raise ValueError("role must be one of: GUEST, HOST")
+        return v
 
 
 class UserLogin(BaseModel):

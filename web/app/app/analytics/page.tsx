@@ -2,10 +2,14 @@
 
 import { CategoryBarChart } from "@/components/admin/charts/CategoryBarChart";
 import { ConfidenceBarChart } from "@/components/admin/charts/ConfidenceBarChart";
+import { FeatureRequestTrendChart } from "@/components/admin/charts/FeatureRequestTrendChart";
+import { MostAffectedCitiesChart } from "@/components/admin/charts/MostAffectedCitiesChart";
 import { SentimentPieChart } from "@/components/admin/charts/SentimentPieChart";
 import { TopThemesChart } from "@/components/admin/charts/TopThemesChart";
 import { WeeklyTrendChart } from "@/components/admin/charts/WeeklyTrendChart";
+import { HostPerformanceTable } from "@/components/admin/HostPerformanceTable";
 import { KpiCards } from "@/components/admin/KpiCards";
+import { PropertyHealthTable } from "@/components/admin/PropertyHealthTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataState } from "@/components/shared/DataState";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,8 +34,8 @@ export default function AnalyticsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Analytics</h1>
-        <p className="text-muted-foreground">Sentiment, categories, and trends across all feedback.</p>
+        <h1 className="text-2xl font-semibold text-foreground">Guest Experience Analytics</h1>
+        <p className="text-muted-foreground">Sentiment, categories, properties, and trends across all guest and host feedback.</p>
       </div>
 
       <DataState query={analyticsQuery} skeleton={<Skeleton className="h-24 w-full" />}>
@@ -64,6 +68,39 @@ export default function AnalyticsPage() {
             {(themes) => <TopThemesChart data={themes} />}
           </DataState>
         </ChartCard>
+        <ChartCard title="Most affected cities">
+          <DataState query={analyticsQuery} skeleton={<Skeleton className="h-full w-full" />}>
+            {(analytics) => <MostAffectedCitiesChart data={analytics.most_affected_cities} />}
+          </DataState>
+        </ChartCard>
+        <ChartCard title="Feature request trend">
+          <DataState query={analyticsQuery} skeleton={<Skeleton className="h-full w-full" />}>
+            {(analytics) => <FeatureRequestTrendChart data={analytics.feature_request_trend} />}
+          </DataState>
+        </ChartCard>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Property health</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DataState query={analyticsQuery} skeleton={<Skeleton className="h-48 w-full" />}>
+              {(analytics) => <PropertyHealthTable data={analytics.property_health} />}
+            </DataState>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Host performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DataState query={analyticsQuery} skeleton={<Skeleton className="h-48 w-full" />}>
+              {(analytics) => <HostPerformanceTable data={analytics.host_performance} />}
+            </DataState>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

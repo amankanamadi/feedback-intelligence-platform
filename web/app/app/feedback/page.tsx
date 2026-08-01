@@ -3,20 +3,23 @@
 import { FeedbackListAdmin } from "@/components/feedback/FeedbackListAdmin";
 import { FeedbackListUser } from "@/components/feedback/FeedbackListUser";
 import { useAuth } from "@/lib/auth";
+import { STAFF_ROLES } from "@/types/auth";
 
 export default function FeedbackPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "ADMIN";
+  const isStaff = !!user && STAFF_ROLES.includes(user.role);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">{isAdmin ? "All Feedback" : "My Feedback"}</h1>
+        <h1 className="text-2xl font-semibold text-foreground">{isStaff ? "All Feedback" : "My Feedback"}</h1>
         <p className="text-muted-foreground">
-          {isAdmin ? "Review, categorize, and respond to incoming feedback." : "Track the status of feedback you've submitted."}
+          {isStaff
+            ? "Review, categorize, and respond to incoming guest and host feedback."
+            : "Track the status of feedback you've submitted."}
         </p>
       </div>
-      {isAdmin ? <FeedbackListAdmin /> : <FeedbackListUser />}
+      {isStaff ? <FeedbackListAdmin /> : <FeedbackListUser />}
     </div>
   );
 }

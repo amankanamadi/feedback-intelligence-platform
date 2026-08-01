@@ -6,7 +6,7 @@ export default function AuditLogsPage() {
     <EmptyState
       icon={<FileClock className="size-10" aria-hidden="true" />}
       title="Audit logs coming soon"
-      description="This page will show a history of admin actions on feedback (status/priority/notes/response changes)."
+      description="This page will show a history of staff actions on feedback cases (status/priority/notes/response changes)."
     />
   );
 }

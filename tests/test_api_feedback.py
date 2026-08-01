@@ -6,16 +6,16 @@ from tests.conftest import DEFAULT_CLASSIFICATION
 
 
 def test_submit_feedback_success(admin_client, mock_ai):
-    response = admin_client.post("/feedback", json={"raw_text": "Dashboard is very slow to load."})
+    response = admin_client.post("/feedback", json={"raw_text": "The apartment was filthy when we arrived."})
 
     assert response.status_code == 201
     body = response.json()
-    assert body["raw_text"] == "Dashboard is very slow to load."
-    assert body["main_category"] == "Incident"
-    assert body["sub_category"] == "Performance Issue"
+    assert body["raw_text"] == "The apartment was filthy when we arrived."
+    assert body["main_category"] == "Guest Review"
+    assert body["sub_category"] == "Cleanliness"
     assert body["sentiment"] == "Negative"
     assert body["confidence"] == 95
-    assert set(body["themes"]) == {"Slow Dashboard", "Performance"}
+    assert set(body["themes"]) == {"Dirty Apartment", "Cleaning Quality"}
     mock_ai["classify"].assert_called_once()
     mock_ai["store"].assert_called_once()
 
@@ -35,20 +35,20 @@ def test_submit_feedback_rejects_whitespace_only_text(admin_client, mock_ai):
 
 
 def test_submit_feedback_strips_surrounding_whitespace(admin_client, mock_ai):
-    response = admin_client.post("/feedback", json={"raw_text": "  Dashboard is slow.  "})
+    response = admin_client.post("/feedback", json={"raw_text": "  The WiFi is slow.  "})
 
     assert response.status_code == 201
-    assert response.json()["raw_text"] == "Dashboard is slow."
+    assert response.json()["raw_text"] == "The WiFi is slow."
 
 
 def test_submit_feedback_strips_zero_width_characters(admin_client, mock_ai):
     zero_width_space = chr(0x200B)
-    raw_text = f"The{zero_width_space}dashboard{zero_width_space}is{zero_width_space}slow."
+    raw_text = f"The{zero_width_space}WiFi{zero_width_space}is{zero_width_space}slow."
 
     response = admin_client.post("/feedback", json={"raw_text": raw_text})
 
     assert response.status_code == 201
-    assert response.json()["raw_text"] == "Thedashboardisslow."
+    assert response.json()["raw_text"] == "TheWiFiisslow."
 
 
 def test_submit_feedback_rejects_text_that_is_only_zero_width_characters(admin_client, mock_ai):
@@ -68,7 +68,7 @@ def test_submit_feedback_rejects_excessive_character_repetition(admin_client, mo
 
 
 def test_submit_feedback_allows_normal_repeated_punctuation(admin_client, mock_ai):
-    response = admin_client.post("/feedback", json={"raw_text": "This is sooooo slow!!!!"})
+    response = admin_client.post("/feedback", json={"raw_text": "This WiFi is sooooo slow!!!!"})
 
     assert response.status_code == 201
 
@@ -86,21 +86,22 @@ def test_submit_feedback_degrades_gracefully_on_classification_failure(admin_cli
 
 def test_submit_feedback_handles_duplicate_themes_from_ai(admin_client, mock_ai):
     mock_ai["classify"].return_value = FeedbackClassification(
-        main_category=MainCategory.INCIDENT,
-        sub_category=SubCategory.PERFORMANCE_ISSUE,
+        main_category=MainCategory.GUEST_REVIEW,
+        sub_category=SubCategory.CLEANLINESS,
         sentiment=Sentiment.NEGATIVE,
-        themes=["Slow Dashboard", "Slow Dashboard", "Performance"],
+        themes=["Dirty Apartment", "Dirty Apartment", "Cleaning Quality"],
         priority=Priority.MEDIUM,
         confidence=90,
-        summary="Customer reports slow dashboard performance.",
+        summary="Guest reports the apartment was not clean on arrival.",
+        recommended_action="Escalate to housekeeping.",
     )
 
-    response = admin_client.post("/feedback", json={"raw_text": "The dashboard is really slow."})
+    response = admin_client.post("/feedback", json={"raw_text": "The apartment was really dirty."})
 
     assert response.status_code == 201
     body = response.json()
-    assert body["main_category"] == "Incident"  # classification was saved, not dropped
-    assert sorted(body["themes"]) == ["Performance", "Slow Dashboard"]
+    assert body["main_category"] == "Guest Review"  # classification was saved, not dropped
+    assert sorted(body["themes"]) == ["Cleaning Quality", "Dirty Apartment"]
 
 
 def test_submit_feedback_degrades_gracefully_on_embedding_failure(admin_client, mock_ai):
@@ -110,7 +111,7 @@ def test_submit_feedback_degrades_gracefully_on_embedding_failure(admin_client, 
 
     assert response.status_code == 201
     body = response.json()
-    assert body["main_category"] == "Incident"  # classification still ran
+    assert body["main_category"] == "Guest Review"  # classification still ran
     mock_ai["store"].assert_not_called()  # no embedding available to store
 
 
@@ -146,35 +147,37 @@ def test_get_feedback_by_id_round_trips(admin_client, mock_ai):
 def test_list_feedback_filters_by_category_and_search(admin_client, mock_ai):
     mock_ai["classify"].side_effect = [
         FeedbackClassification(
-            main_category=MainCategory.INCIDENT,
-            sub_category=SubCategory.PERFORMANCE_ISSUE,
+            main_category=MainCategory.GUEST_REVIEW,
+            sub_category=SubCategory.CLEANLINESS,
             sentiment=Sentiment.NEGATIVE,
-            themes=["Slow"],
+            themes=["Dirty"],
             priority=Priority.HIGH,
             confidence=90,
             summary="s",
+            recommended_action="Escalate to housekeeping.",
         ),
         FeedbackClassification(
-            main_category=MainCategory.SERVICE_REQUEST,
-            sub_category=SubCategory.FEATURE_REQUEST,
+            main_category=MainCategory.SUPPORT_TICKET,
+            sub_category=SubCategory.FEATURE_REQUESTS,
             sentiment=Sentiment.NEUTRAL,
-            themes=["Dark Mode"],
+            themes=["Search Filters"],
             priority=Priority.LOW,
             confidence=90,
             summary="s",
+            recommended_action="Log with product team.",
         ),
     ]
 
-    admin_client.post("/feedback", json={"raw_text": "The dashboard is really slow."})
-    admin_client.post("/feedback", json={"raw_text": "Please add dark mode."})
+    admin_client.post("/feedback", json={"raw_text": "The apartment was really dirty."})
+    admin_client.post("/feedback", json={"raw_text": "Please add a pet-friendly search filter."})
 
-    incident_only = admin_client.get("/feedback", params={"main_category": "Incident"}).json()
-    assert len(incident_only) == 1
-    assert incident_only[0]["main_category"] == "Incident"
+    guest_review_only = admin_client.get("/feedback", params={"main_category": "Guest Review"}).json()
+    assert len(guest_review_only) == 1
+    assert guest_review_only[0]["main_category"] == "Guest Review"
 
-    search_results = admin_client.get("/feedback", params={"search": "dark mode"}).json()
+    search_results = admin_client.get("/feedback", params={"search": "pet-friendly"}).json()
     assert len(search_results) == 1
-    assert "dark mode" in search_results[0]["raw_text"].lower()
+    assert "pet-friendly" in search_results[0]["raw_text"].lower()
 
 
 def test_list_feedback_pagination(admin_client, mock_ai):
@@ -195,7 +198,7 @@ def test_bulk_upload_processes_all_items_in_order(admin_client, mock_ai):
     assert response.status_code == 201
     body = response.json()
     assert [item["raw_text"] for item in body] == ["First item.", "Second item.", "Third item."]
-    assert all(item["main_category"] == "Incident" for item in body)
+    assert all(item["main_category"] == "Guest Review" for item in body)
     assert mock_ai["classify"].call_count == 3
     assert mock_ai["store"].call_count == 3
 
@@ -241,27 +244,37 @@ def test_bulk_upload_continues_past_individual_classification_failures(admin_cli
     assert response.status_code == 201
     body = response.json()
     assert len(body) == 3
-    assert body[0]["main_category"] == "Incident"
+    assert body[0]["main_category"] == "Guest Review"
     assert body[1]["main_category"] is None  # failed item still stored, left unclassified
-    assert body[2]["main_category"] == "Incident"
+    assert body[2]["main_category"] == "Guest Review"
 
 
-def test_submit_feedback_with_full_metadata_round_trips(admin_client, mock_ai):
+def test_submit_feedback_with_full_metadata_round_trips(admin_client, db_session, mock_ai):
+    from app.database.models import Property, PropertyType
+
+    property_row = Property(
+        name="Sunny Loft",
+        host_name="Jordan Lee",
+        city="Austin",
+        country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    db_session.add(property_row)
+    db_session.commit()
+
     response = admin_client.post(
         "/feedback",
         json={
-            "raw_text": "Can't upload invoices after today's update.",
+            "raw_text": "Can't check in - the door code isn't working.",
             "submitter_user_id_legacy": "user-42",
             "name": "Jordan Lee",
             "email": "jordan@example.com",
             "source": "Mobile App",
-            "product": "Invoicing",
-            "module": "Uploads",
+            "property_id": property_row.id,
             "version": "3.2.1",
             "device": "iPhone 15",
             "browser": "Safari",
             "platform": "iOS",
-            "region": "US-East",
         },
     )
 
@@ -271,13 +284,13 @@ def test_submit_feedback_with_full_metadata_round_trips(admin_client, mock_ai):
     assert body["name"] == "Jordan Lee"
     assert body["email"] == "jordan@example.com"
     assert body["source"] == "Mobile App"
-    assert body["product"] == "Invoicing"
-    assert body["module"] == "Uploads"
+    assert body["property_id"] == property_row.id
+    assert body["property_name"] == "Sunny Loft"
+    assert body["property_city"] == "Austin"
     assert body["version"] == "3.2.1"
     assert body["device"] == "iPhone 15"
     assert body["browser"] == "Safari"
     assert body["platform"] == "iOS"
-    assert body["region"] == "US-East"
 
 
 def test_submit_feedback_without_metadata_defaults_to_null(admin_client, mock_ai):
@@ -285,7 +298,19 @@ def test_submit_feedback_without_metadata_defaults_to_null(admin_client, mock_ai
 
     assert response.status_code == 201
     body = response.json()
-    for field in ["submitter_user_id_legacy", "name", "email", "source", "product", "module", "version", "device", "browser", "platform", "region"]:
+    for field in [
+        "submitter_user_id_legacy",
+        "name",
+        "email",
+        "source",
+        "property_id",
+        "property_name",
+        "property_city",
+        "version",
+        "device",
+        "browser",
+        "platform",
+    ]:
         assert body[field] is None
 
 
@@ -298,12 +323,33 @@ def test_submit_feedback_rejects_invalid_source_value(admin_client, mock_ai):
     mock_ai["classify"].assert_not_called()
 
 
-def test_bulk_upload_captures_metadata_independently_per_item(admin_client, mock_ai):
+def test_submit_feedback_rejects_unknown_property_id(admin_client, mock_ai):
+    response = admin_client.post(
+        "/feedback", json={"raw_text": "Anything at all.", "property_id": 999999}
+    )
+
+    assert response.status_code == 404
+    mock_ai["classify"].assert_not_called()
+
+
+def test_bulk_upload_captures_metadata_independently_per_item(admin_client, db_session, mock_ai):
+    from app.database.models import Property, PropertyType
+
+    property_row = Property(
+        name="Sunny Loft",
+        host_name="Jordan Lee",
+        city="Austin",
+        country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    db_session.add(property_row)
+    db_session.commit()
+
     response = admin_client.post(
         "/bulk-upload",
         json={
             "items": [
-                {"raw_text": "First item.", "source": "Email", "product": "Invoicing"},
+                {"raw_text": "First item.", "source": "Email", "property_id": property_row.id},
                 {"raw_text": "Second item."},
             ]
         },
@@ -312,14 +358,14 @@ def test_bulk_upload_captures_metadata_independently_per_item(admin_client, mock
     assert response.status_code == 201
     body = response.json()
     assert body[0]["source"] == "Email"
-    assert body[0]["product"] == "Invoicing"
+    assert body[0]["property_id"] == property_row.id
     assert body[1]["source"] is None
-    assert body[1]["product"] is None
+    assert body[1]["property_id"] is None
 
 
 def test_list_feedback_filters_by_source(admin_client, mock_ai):
     admin_client.post("/feedback", json={"raw_text": "Via email.", "source": "Email"})
-    admin_client.post("/feedback", json={"raw_text": "Via web form.", "source": "Web Form"})
+    admin_client.post("/feedback", json={"raw_text": "Via the website.", "source": "Website"})
 
     response = admin_client.get("/feedback", params={"source": "Email"})
 
@@ -329,20 +375,31 @@ def test_list_feedback_filters_by_source(admin_client, mock_ai):
     assert body[0]["raw_text"] == "Via email."
 
 
-def test_list_feedback_filters_by_product_partial_match(admin_client, mock_ai):
-    admin_client.post("/feedback", json={"raw_text": "Invoicing bug.", "product": "Invoicing"})
-    admin_client.post("/feedback", json={"raw_text": "Unrelated.", "product": "Payroll"})
+def test_list_feedback_filters_by_property_id(admin_client, db_session, mock_ai):
+    from app.database.models import Property, PropertyType
 
-    response = admin_client.get("/feedback", params={"product": "invoic"})
+    property_a = Property(
+        name="Sunny Loft", host_name="Jordan Lee", city="Austin", country="USA", property_type=PropertyType.ENTIRE_HOME
+    )
+    property_b = Property(
+        name="Cozy Studio", host_name="Alex Rivera", city="Denver", country="USA", property_type=PropertyType.PRIVATE_ROOM
+    )
+    db_session.add_all([property_a, property_b])
+    db_session.commit()
+
+    admin_client.post("/feedback", json={"raw_text": "Feedback for Sunny Loft.", "property_id": property_a.id})
+    admin_client.post("/feedback", json={"raw_text": "Feedback for Cozy Studio.", "property_id": property_b.id})
+
+    response = admin_client.get("/feedback", params={"property_id": property_a.id})
 
     assert response.status_code == 200
     body = response.json()
     assert len(body) == 1
-    assert body[0]["raw_text"] == "Invoicing bug."
+    assert body[0]["raw_text"] == "Feedback for Sunny Loft."
 
 
 def test_bulk_upload_file_accepts_csv(admin_client, mock_ai):
-    csv_content = b"raw_text,source\nFirst item.,Web Form\nSecond item.,Email\n"
+    csv_content = b"raw_text,source\nFirst item.,Website\nSecond item.,Email\n"
 
     response = admin_client.post(
         "/bulk-upload/file",

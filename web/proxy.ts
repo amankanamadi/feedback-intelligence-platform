@@ -12,10 +12,12 @@ import type { NextRequest } from "next/server";
 const API_BASE_URL =
   process.env.INTERNAL_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-type Role = "USER" | "ADMIN";
+type Role = "GUEST" | "HOST" | "SUPPORT_MANAGER" | "OPS_MANAGER" | "PRODUCT_MANAGER" | "EXEC";
 type Me = { role: Role } | null;
 
-// Both login entry points ("Login to Give Feedback" and "Admin Login")
+const STAFF_ROLES = new Set<Role>(["SUPPORT_MANAGER", "OPS_MANAGER", "PRODUCT_MANAGER", "EXEC"]);
+
+// Both login entry points ("Login to Give Feedback" and "Operations Login")
 // land here regardless of role - one app, not two portals.
 const APP_HOME = "/app";
 
@@ -23,11 +25,12 @@ const APP_HOME = "/app";
 // them straight into the app instead.
 const AUTH_ENTRY_PAGES = new Set(["/login", "/admin-login", "/signup"]);
 
-// Sub-paths under /app that only render/apply for ADMIN - a non-admin
-// hitting one directly by URL is bounced back to /app. Defense-in-depth
-// on top of the backend's own 403s and the sidebar simply not rendering
-// the link for a USER.
-const ADMIN_ONLY_SEGMENTS = [
+// Sub-paths under /app that only render/apply for staff (Support Manager,
+// Ops Manager, Product Manager, Exec Leadership) - a Guest/Host hitting
+// one directly by URL is bounced back to /app. Defense-in-depth on top of
+// the backend's own 403s and the sidebar simply not rendering the link
+// for a submitter-role user.
+const STAFF_ONLY_SEGMENTS = [
   "/app/analytics",
   "/app/reports",
   "/app/users",
@@ -75,7 +78,7 @@ export async function proxy(request: NextRequest) {
 
   if (isUnderSegment(pathname, "/app")) {
     if (!me) return redirectToLogin(request);
-    if (ADMIN_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && me.role !== "ADMIN") {
+    if (STAFF_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && !STAFF_ROLES.has(me.role)) {
       return NextResponse.redirect(new URL(APP_HOME, request.url));
     }
   }

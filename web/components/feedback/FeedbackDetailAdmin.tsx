@@ -96,10 +96,13 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
                   <dd className="text-foreground">{feedback.source}</dd>
                 </div>
               )}
-              {feedback.product && (
+              {feedback.property_name && (
                 <div>
-                  <dt>Product</dt>
-                  <dd className="text-foreground">{feedback.product}</dd>
+                  <dt>Listing</dt>
+                  <dd className="text-foreground">
+                    {feedback.property_name}
+                    {feedback.property_city ? ` — ${feedback.property_city}` : ""}
+                  </dd>
                 </div>
               )}
             </dl>
@@ -133,6 +136,12 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
               <div>
                 <p className="text-xs text-muted-foreground">Summary</p>
                 <p className="text-sm text-foreground">{feedback.summary}</p>
+              </div>
+            )}
+            {feedback.recommended_action && (
+              <div>
+                <p className="text-xs text-muted-foreground">Recommended action</p>
+                <p className="text-sm text-foreground">{feedback.recommended_action}</p>
               </div>
             )}
             {feedback.themes.length > 0 && (
@@ -220,7 +229,7 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
               <input
                 id="tags"
                 {...register("tags")}
-                placeholder="enterprise, sso, roadmap"
+                placeholder="superhost, repeat-guest, escalated"
                 className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <p className="text-xs text-muted-foreground">Comma-separated.</p>

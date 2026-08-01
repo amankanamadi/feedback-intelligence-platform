@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
-import { MessageSquareHeart } from "lucide-react";
+import { Home } from "lucide-react";
 import { AuthCard } from "@/components/shared/AuthCard";
 import { PasswordInput } from "@/components/shared/PasswordInput";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ const signupSchema = z
     email: z.string().min(1, "Email is required").email("Enter a valid email address."),
     password: z.string().min(8, "Password must be at least 8 characters."),
     confirmPassword: z.string().min(1, "Please confirm your password."),
+    role: z.enum(["GUEST", "HOST"]),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match.",
@@ -39,12 +40,12 @@ export default function SignupPage() {
     formState: { errors },
   } = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
-    defaultValues: { fullName: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: { fullName: "", email: "", password: "", confirmPassword: "", role: "GUEST" },
   });
 
   const onSubmit = (values: SignupFormValues) => {
     registerMutation.mutate(
-      { email: values.email, password: values.password, full_name: values.fullName || undefined },
+      { email: values.email, password: values.password, full_name: values.fullName || undefined, role: values.role },
       {
         onSuccess: () => {
           toast.success("Account created!");
@@ -60,12 +61,12 @@ export default function SignupPage() {
   return (
     <div className="flex w-full flex-col items-center gap-6">
       <div className="flex items-center gap-2 text-primary">
-        <MessageSquareHeart className="size-8" aria-hidden="true" />
-        <span className="text-lg font-semibold text-foreground">Feedback Intelligence</span>
+        <Home className="size-8" aria-hidden="true" />
+        <span className="text-lg font-semibold text-foreground">Airbnb Guest Experience Intelligence</span>
       </div>
       <AuthCard
         title="Create your account"
-        subtitle="Sign up to share feedback and track its progress."
+        subtitle="Sign up as a guest or host to share feedback and track its progress."
         footer={
           <p className="text-center text-sm text-muted-foreground">
             Already have an account?{" "}
@@ -76,6 +77,18 @@ export default function SignupPage() {
         }
       >
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="role">I am a</Label>
+            <select
+              id="role"
+              {...register("role")}
+              className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+            >
+              <option value="GUEST">Guest</option>
+              <option value="HOST">Host</option>
+            </select>
+          </div>
+
           <div className="flex flex-col gap-2">
             <Label htmlFor="fullName">Full name</Label>
             <Input id="fullName" autoComplete="name" placeholder="Jordan Lee" {...register("fullName")} />

@@ -2,7 +2,12 @@
 manually against the real OpenAI API:
 
     python scripts/generate_synthetic_feedback.py
+    python scripts/generate_synthetic_feedback.py --per-topic 13
     python scripts/generate_synthetic_feedback.py --output scripts/synthetic_dataset_batch2.json --per-topic 5
+
+With the default 12 topic hints (one per sub-category), `--per-topic 13`
+produces 156 items - comfortably around the ~150-item target used by
+scripts/seed_synthetic_feedback.py.
 
 Generates raw text only - no category, sentiment, priority, or theme
 labels are produced or stored anywhere. The taxonomy below is used purely
@@ -39,43 +44,50 @@ from app.database.models import MainCategory, SubCategory  # noqa: E402
 DEFAULT_OUTPUT_PATH = Path(__file__).resolve().parent / "synthetic_dataset.json"
 DEFAULT_TEXTS_PER_TOPIC = 3
 
-SYSTEM_PROMPT = """You are helping generate realistic synthetic customer
-feedback for a SaaS product, to seed test data for a feedback intelligence
-platform.
+SYSTEM_PROMPT = """You are helping generate realistic synthetic guest and host
+feedback for an Airbnb-style short-term rental platform, to seed test data
+for a guest experience intelligence platform.
 
 You will be given a topic area as inspiration only. Write ONE piece of
-feedback text a real customer would plausibly write that's loosely
-inspired by that topic - do not mention the topic label itself, do not
-sound like you are filling out a category. Vary length, tone, and
-specificity across calls: some one-liners, some multi-sentence, some
-vague, some highly specific, a realistic mix of positive/neutral/negative
-in tone depending on what naturally fits the topic. Do not repeat
-scenarios or phrasing you have likely used before. Output only the
-feedback text itself, nothing else.
+feedback text a real guest, host, or support requester would plausibly
+write that's loosely inspired by that topic - do not mention the topic
+label itself, do not sound like you are filling out a category.
+
+Depending on the topic, the writer could plausibly be:
+- A guest leaving a post-stay review or in-stay message about the listing
+  (cleanliness, WiFi, check-in/lockbox/smart-lock experience, amenities,
+  or how communicative/responsive the host was).
+- A host reporting a problem with a guest or the property itself (safety
+  or security concerns, property damage, something broken that needs
+  maintenance).
+- A guest or host contacting support about the platform itself (a booking
+  gone wrong, a failed or duplicate payment, a refund they're owed, a bug
+  or crash in the app or website, or a feature they wish existed).
+
+Vary length, tone, and specificity across calls: some one-liners, some
+multi-sentence and detailed, some vague, some highly specific with names/
+dates/amounts. Vary sentiment realistically for the topic - some glowing,
+grateful reviews; some furious, all-caps-adjacent complaints; some flat,
+neutral support requests; some dry or sarcastic remarks; some that mix a
+compliment with a complaint. Do not repeat scenarios or phrasing you have
+likely used before. Output only the feedback text itself, nothing else -
+no labels, no quotation marks, no "Feedback:" prefix.
 """
 
 # Purely a generation-time variety hint - never persisted as a label.
 TOPIC_HINTS = [
-    (MainCategory.INCIDENT, SubCategory.PRODUCT_BUG),
-    (MainCategory.INCIDENT, SubCategory.APPLICATION_CRASH),
-    (MainCategory.INCIDENT, SubCategory.LOGIN_ISSUE),
-    (MainCategory.INCIDENT, SubCategory.PAYMENT_FAILURE),
-    (MainCategory.INCIDENT, SubCategory.PERFORMANCE_ISSUE),
-    (MainCategory.INCIDENT, SubCategory.SECURITY_ISSUE),
-    (MainCategory.INCIDENT, SubCategory.DATA_LOSS),
-    (MainCategory.INCIDENT, SubCategory.INTEGRATION_FAILURE),
-    (MainCategory.SERVICE_REQUEST, SubCategory.FEATURE_REQUEST),
-    (MainCategory.SERVICE_REQUEST, SubCategory.UI_UX_IMPROVEMENT),
-    (MainCategory.SERVICE_REQUEST, SubCategory.DOCUMENTATION_REQUEST),
-    (MainCategory.SERVICE_REQUEST, SubCategory.API_ENHANCEMENT),
-    (MainCategory.SERVICE_REQUEST, SubCategory.ACCESSIBILITY_IMPROVEMENT),
-    (MainCategory.SERVICE_REQUEST, SubCategory.NEW_INTEGRATION),
-    (MainCategory.GENERAL_FEEDBACK, SubCategory.APPRECIATION),
-    (MainCategory.GENERAL_FEEDBACK, SubCategory.COMPLAINT),
-    (MainCategory.GENERAL_FEEDBACK, SubCategory.PRICING_FEEDBACK),
-    (MainCategory.GENERAL_FEEDBACK, SubCategory.CUSTOMER_SUPPORT),
-    (MainCategory.GENERAL_FEEDBACK, SubCategory.QUESTION),
-    (MainCategory.GENERAL_FEEDBACK, SubCategory.SUGGESTION),
+    (MainCategory.GUEST_REVIEW, SubCategory.CLEANLINESS),
+    (MainCategory.GUEST_REVIEW, SubCategory.WIFI),
+    (MainCategory.GUEST_REVIEW, SubCategory.CHECK_IN),
+    (MainCategory.GUEST_REVIEW, SubCategory.AMENITIES),
+    (MainCategory.GUEST_REVIEW, SubCategory.HOST_COMMUNICATION),
+    (MainCategory.HOST_COMPLAINT, SubCategory.SAFETY),
+    (MainCategory.HOST_COMPLAINT, SubCategory.MAINTENANCE),
+    (MainCategory.SUPPORT_TICKET, SubCategory.BOOKING_EXPERIENCE),
+    (MainCategory.SUPPORT_TICKET, SubCategory.PAYMENTS),
+    (MainCategory.SUPPORT_TICKET, SubCategory.REFUNDS),
+    (MainCategory.SUPPORT_TICKET, SubCategory.APP_ISSUES),
+    (MainCategory.SUPPORT_TICKET, SubCategory.FEATURE_REQUESTS),
 ]
 
 

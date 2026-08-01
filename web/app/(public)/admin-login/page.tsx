@@ -8,13 +8,13 @@ export default function AdminLoginPage() {
     <div className="flex w-full flex-col items-center gap-6">
       <div className="flex items-center gap-2 text-primary">
         <ShieldCheck className="size-8" aria-hidden="true" />
-        <span className="text-lg font-semibold text-foreground">Feedback Intelligence Admin</span>
+        <span className="text-lg font-semibold text-foreground">Airbnb Operations</span>
       </div>
-      <AuthCard title="Admin Login" subtitle="Authorized personnel only.">
+      <AuthCard title="Operations Sign In" subtitle="For Customer Support, Operations, Product, and Executive Leadership teams only.">
         <AuthForm forgotPasswordHref="/forgot-password" />
       </AuthCard>
       <Link href="/login" className="text-sm text-muted-foreground hover:underline">
-        Looking to submit feedback instead?
+        Guest or host? Sign in here
       </Link>
     </div>
   );

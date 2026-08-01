@@ -11,38 +11,54 @@ from app.database.models import MainCategory, Priority, Sentiment, SubCategory
 def test_feedback_classification_rejects_confidence_above_100():
     with pytest.raises(ValidationError):
         FeedbackClassification(
-            main_category=MainCategory.INCIDENT,
-            sub_category=SubCategory.PERFORMANCE_ISSUE,
+            main_category=MainCategory.GUEST_REVIEW,
+            sub_category=SubCategory.CLEANLINESS,
             sentiment=Sentiment.NEGATIVE,
-            themes=["Slow"],
+            themes=["Dirty"],
             priority=Priority.MEDIUM,
             confidence=150,
             summary="s",
+            recommended_action="Escalate to housekeeping.",
         )
 
 
 def test_feedback_classification_rejects_confidence_below_0():
     with pytest.raises(ValidationError):
         FeedbackClassification(
-            main_category=MainCategory.INCIDENT,
-            sub_category=SubCategory.PERFORMANCE_ISSUE,
+            main_category=MainCategory.GUEST_REVIEW,
+            sub_category=SubCategory.CLEANLINESS,
             sentiment=Sentiment.NEGATIVE,
-            themes=["Slow"],
+            themes=["Dirty"],
             priority=Priority.MEDIUM,
             confidence=-1,
+            summary="s",
+            recommended_action="Escalate to housekeeping.",
+        )
+
+
+def test_feedback_classification_requires_recommended_action():
+    with pytest.raises(ValidationError):
+        FeedbackClassification(
+            main_category=MainCategory.GUEST_REVIEW,
+            sub_category=SubCategory.CLEANLINESS,
+            sentiment=Sentiment.NEGATIVE,
+            themes=["Dirty"],
+            priority=Priority.MEDIUM,
+            confidence=80,
             summary="s",
         )
 
 
 def test_feedback_classification_allows_empty_themes():
     classification = FeedbackClassification(
-        main_category=MainCategory.GENERAL_FEEDBACK,
-        sub_category=SubCategory.QUESTION,
+        main_category=MainCategory.SUPPORT_TICKET,
+        sub_category=SubCategory.BOOKING_EXPERIENCE,
         sentiment=Sentiment.NEUTRAL,
         themes=[],
         priority=Priority.LOW,
         confidence=80,
         summary="s",
+        recommended_action="Follow up with the guest.",
     )
 
     assert classification.themes == []

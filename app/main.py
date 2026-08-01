@@ -12,6 +12,7 @@ from app.api.attachments import router as attachments_router
 from app.api.auth import router as auth_router
 from app.api.feedback import router as feedback_router
 from app.api.feedback_export import router as feedback_export_router
+from app.api.properties import router as properties_router
 from app.api.reports import router as reports_router
 from app.core.config import Settings, get_settings
 from app.core.rate_limit import limiter
@@ -22,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AI Customer Feedback Intelligence Platform")
+app = FastAPI(title="Airbnb Guest Experience Intelligence Platform")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -49,6 +50,7 @@ app.include_router(feedback_export_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
 app.include_router(attachments_router)
+app.include_router(properties_router)
 
 
 @app.exception_handler(OperationalError)

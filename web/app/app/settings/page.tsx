@@ -6,7 +6,7 @@ export default function SettingsPage() {
     <EmptyState
       icon={<Settings className="size-10" aria-hidden="true" />}
       title="System settings coming soon"
-      description="This page will hold platform-wide configuration."
+      description="This page will hold platform-wide configuration for the Guest Experience Intelligence Platform."
     />
   );
 }

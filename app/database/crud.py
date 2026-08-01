@@ -14,6 +14,7 @@ from app.database.models import (
     MainCategory,
     PasswordResetToken,
     Priority,
+    Property,
     Role,
     Sentiment,
     SubCategory,
@@ -81,13 +82,11 @@ def create_feedback(
     name: str | None = None,
     email: str | None = None,
     source: FeedbackSource | None = None,
-    product: str | None = None,
-    module: str | None = None,
+    property_id: int | None = None,
     version: str | None = None,
     device: str | None = None,
     browser: str | None = None,
     platform: str | None = None,
-    region: str | None = None,
 ) -> Feedback:
     existing_id = db.scalar(select(Feedback.id).where(Feedback.raw_text == raw_text).limit(1))
     if existing_id is not None:
@@ -103,13 +102,11 @@ def create_feedback(
         name=name,
         email=email,
         source=source,
-        product=product,
-        module=module,
+        property_id=property_id,
         version=version,
         device=device,
         browser=browser,
         platform=platform,
-        region=region,
     )
     if theme_names:
         feedback.themes = _resolve_themes(db, theme_names)
@@ -131,6 +128,7 @@ def apply_classification(
     confidence: int,
     summary: str,
     theme_names: list[str],
+    recommended_action: str | None = None,
 ) -> Feedback:
     feedback.main_category = main_category
     feedback.sub_category = sub_category
@@ -138,6 +136,7 @@ def apply_classification(
     feedback.priority = priority
     feedback.confidence = confidence
     feedback.summary = summary
+    feedback.recommended_action = recommended_action
     feedback.themes = _resolve_themes(db, theme_names)
 
     db.commit()
@@ -198,7 +197,7 @@ def list_feedback(
     sentiment: Sentiment | None = None,
     search: str | None = None,
     source: FeedbackSource | None = None,
-    product: str | None = None,
+    property_id: int | None = None,
     owner_user_id: int | None = None,
 ) -> list[Feedback]:
     stmt = select(Feedback).order_by(Feedback.created_at.desc())
@@ -210,9 +209,9 @@ def list_feedback(
         stmt = stmt.where(Feedback.raw_text.ilike(f"%{search}%"))
     if source is not None:
         stmt = stmt.where(Feedback.source == source)
-    if product:
-        stmt = stmt.where(Feedback.product.ilike(f"%{product}%"))
-    # Scopes a USER-role caller to their own rows; ADMIN callers pass None
+    if property_id is not None:
+        stmt = stmt.where(Feedback.property_id == property_id)
+    # Scopes a GUEST/HOST caller to their own rows; STAFF callers pass None
     # and see everything. Enforced here (not just in the router) so every
     # call site gets the same ownership guarantee for free.
     if owner_user_id is not None:
@@ -247,6 +246,29 @@ def get_attachment(db: Session, attachment_id: int) -> Attachment | None:
     return db.get(Attachment, attachment_id)
 
 
+def get_property(db: Session, property_id: int) -> Property | None:
+    return db.get(Property, property_id)
+
+
+def list_properties(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+    city: str | None = None,
+) -> list[Property]:
+    stmt = select(Property).order_by(Property.name)
+    if search:
+        pattern = f"%{search}%"
+        stmt = stmt.where(
+            Property.name.ilike(pattern) | Property.city.ilike(pattern) | Property.country.ilike(pattern)
+        )
+    if city:
+        stmt = stmt.where(Property.city.ilike(f"%{city}%"))
+    stmt = stmt.offset(skip).limit(limit)
+    return list(db.scalars(stmt))
+
+
 def get_user_by_email(db: Session, email: str) -> User | None:
     return db.scalar(select(User).where(User.email == email))
 
@@ -261,7 +283,7 @@ def create_user(
     email: str,
     hashed_password: str,
     full_name: str | None = None,
-    role: Role = Role.USER,
+    role: Role = Role.GUEST,
 ) -> User:
     user = User(email=email, hashed_password=hashed_password, full_name=full_name, role=role)
     db.add(user)

@@ -75,7 +75,9 @@ def register(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> UserRead:
-    user = auth_service.register_user(db, email=payload.email, password=payload.password, full_name=payload.full_name)
+    user = auth_service.register_user(
+        db, email=payload.email, password=payload.password, full_name=payload.full_name, role=payload.role
+    )
     # Auto-authenticate on signup - avoids a redundant login step right
     # after registering.
     _set_auth_cookies(response, user, settings)

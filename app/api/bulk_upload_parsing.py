@@ -16,13 +16,11 @@ _ALLOWED_FIELDS = {
     "name",
     "email",
     "source",
-    "product",
-    "module",
+    "property_id",
     "version",
     "device",
     "browser",
     "platform",
-    "region",
 }
 
 

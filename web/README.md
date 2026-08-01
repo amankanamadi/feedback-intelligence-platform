@@ -1,4 +1,4 @@
-# Feedback Intelligence Platform - Frontend
+# Airbnb Guest Experience Intelligence Platform - Frontend
 
 Next.js (App Router, TypeScript) SPA talking to the FastAPI backend in
 `../app`. Auth is cookie-based (httpOnly JWTs set by the backend) - this
@@ -42,26 +42,33 @@ service - only relevant if you're changing how that's configured.
 
 ## One app, role-adaptive - not two portals
 
-There are two distinct login entry points ("Login to Give Feedback" and
-"Admin Login" - different copy/branding, both call the same
+There are two distinct login entry points ("Guest & Host Sign In" and
+"Operations Sign In" - different copy/branding, both call the same
 `POST /auth/login`), but everyone lands in the **same** app at `/app/*`
 afterward. Role only controls which nav items and pages are visible/
-reachable (see `components/app-shell/AppSidebar.tsx`'s `adminOnly` group
+reachable (see `components/app-shell/SidebarNav.tsx`'s `staffOnly` group
 flag) - there's no separate route tree or visual theme per role.
+
+Six roles in two tiers: **Guest**/**Host** are submitters, scoped to
+their own feedback. **Customer Support Manager**/**Operations
+Manager**/**Product Manager**/**Executive Leadership** are staff - all
+four can view every case, analytics, and the weekly report; only Support
+Manager and Ops Manager can edit a case, bulk-upload, or export.
 
 `proxy.ts` (Next.js 16 renamed `middleware.ts` to `proxy.ts`) gates
 `/app/*` by forwarding the incoming cookie to `GET /auth/me` on every
-navigation, and additionally redirects a non-admin away from the
-admin-only sub-paths listed in `ADMIN_ONLY_SEGMENTS`. This is a UX
+navigation, and additionally redirects a non-staff user away from the
+staff-only sub-paths listed in `STAFF_ONLY_SEGMENTS`. This is a UX
 convenience, not the real security boundary - every backend route
 independently enforces its own auth/role checks, since a client-side
 redirect can always be bypassed by calling the API directly.
 
 ## Structure
 
-- `app/(public)/` - login, admin-login, signup, forgot/reset password
+- `app/(public)/` - login, admin-login (operations sign-in), signup,
+  forgot/reset password
 - `app/app/` - the one authenticated app (feedback, profile, and the
-  admin-only analytics/reports/administration pages)
+  staff-only analytics/reports/operations pages)
 - `lib/` - API client, auth context, query client, formatting helpers
 - `hooks/` - TanStack Query mutations/queries
 - `components/ui/` - small hand-rolled primitives (Radix + Tailwind, no

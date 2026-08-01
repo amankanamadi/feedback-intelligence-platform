@@ -11,9 +11,9 @@ def test_system_prompt_includes_mixed_sentiment_guidance():
 
 def test_few_shot_examples_include_sarcasm_case():
     inputs = [example_input for example_input, _ in FEW_SHOT_EXAMPLES]
-    assert any("wonderful" in text.lower() and "crash" in text.lower() for text in inputs)
+    assert any("great" in text.lower() and "cancellation" in text.lower() for text in inputs)
 
 
 def test_few_shot_examples_include_mixed_sentiment_case():
     inputs = [example_input for example_input, _ in FEW_SHOT_EXAMPLES]
-    assert any("rocky start" in text.lower() for text in inputs)
+    assert any("slow to respond" in text.lower() for text in inputs)

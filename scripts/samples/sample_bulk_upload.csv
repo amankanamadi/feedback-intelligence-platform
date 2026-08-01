@@ -1,6 +1,7 @@
-raw_text,source,product,module,version,region
-"The export button crashes every time I try to download a report as PDF.",Web Form,Reporting,Export,2.3.1,US-East
-"Please add a dark mode option to the settings page.",Chatbot,Dashboard,Settings,,EU-West
-"I was billed twice for my subscription this month, please refund the extra charge.",Email,Payments,Checkout,1.4.2,APAC
-"Really appreciate how fast the support team resolved my login issue yesterday!",Survey,,,,
-"Could you add an API endpoint to bulk-export contacts as CSV?",API,Invoicing,,4.0.0-beta,LATAM
+raw_text,source,version,device,platform
+"The lockbox code the host sent didn't match the one on the listing page and we were stuck outside for 20 minutes.",Post-Stay Survey,,,
+"Could you add a way to filter search results by listings that allow pets?",Website,,,
+"I was charged twice for the same reservation and support hasn't responded in 4 days.",Email,,,
+"The app keeps logging me out mid-booking on my phone, it's happened three times this week.",Mobile App,3.1.2,iPhone 14,iOS
+"Our host left a handwritten welcome note and fresh flowers - such a lovely touch!",Post-Stay Survey,,,
+"The WiFi password listed on the fridge doesn't work, we've had zero internet since we arrived.",Support Chat,,,
