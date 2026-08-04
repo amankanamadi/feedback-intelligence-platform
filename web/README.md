@@ -46,29 +46,36 @@ There are two distinct login entry points ("Guest & Host Sign In" and
 "Operations Sign In" - different copy/branding, both call the same
 `POST /auth/login`), but everyone lands in the **same** app at `/app/*`
 afterward. Role only controls which nav items and pages are visible/
-reachable (see `components/app-shell/SidebarNav.tsx`'s `staffOnly` group
-flag) - there's no separate route tree or visual theme per role.
+reachable (see `components/app-shell/SidebarNav.tsx`'s `staffOnly`/
+`hostOnly`/`guestOnly`/`manageOnly`/`trustSafetyOnly` group flags) -
+there's no separate route tree or visual theme per role.
 
-Six roles in two tiers: **Guest**/**Host** are submitters, scoped to
-their own feedback. **Customer Support Manager**/**Operations
-Manager**/**Product Manager**/**Executive Leadership** are staff - all
-four can view every case, analytics, and the weekly report; only Support
-Manager and Ops Manager can edit a case, bulk-upload, or export.
+Seven roles in two tiers: **Guest**/**Host** are submitters, scoped to
+their own feedback (plus guest-only property browsing/wishlist and
+host-only property/performance dashboards). **Customer Support
+Manager**/**Operations Manager**/**Product Manager**/**Trust &
+Safety**/**Executive Leadership** are staff - all five can view every
+case, analytics, and the weekly report; Support Manager and Ops Manager
+can edit any case, bulk-upload, or export, and Trust & Safety can edit
+the Safety-routed cases in their own bypass queue.
 
 `proxy.ts` (Next.js 16 renamed `middleware.ts` to `proxy.ts`) gates
 `/app/*` by forwarding the incoming cookie to `GET /auth/me` on every
-navigation, and additionally redirects a non-staff user away from the
-staff-only sub-paths listed in `STAFF_ONLY_SEGMENTS`. This is a UX
-convenience, not the real security boundary - every backend route
-independently enforces its own auth/role checks, since a client-side
-redirect can always be bypassed by calling the API directly.
+navigation, and additionally redirects a user away from any role-gated
+sub-path they can't use (`STAFF_ONLY_SEGMENTS`, `HOST_ONLY_SEGMENTS`,
+`GUEST_ONLY_SEGMENTS`, `MANAGE_ONLY_SEGMENTS`,
+`TRUST_SAFETY_ONLY_SEGMENTS`). This is a UX convenience, not the real
+security boundary - every backend route independently enforces its own
+auth/role checks, since a client-side redirect can always be bypassed by
+calling the API directly.
 
 ## Structure
 
 - `app/(public)/` - login, admin-login (operations sign-in), signup,
   forgot/reset password
-- `app/app/` - the one authenticated app (feedback, profile, and the
-  staff-only analytics/reports/operations pages)
+- `app/app/` - the one authenticated app: feedback, profile, guest
+  property browsing/wishlist, the host dashboard, the staff-only
+  analytics/reports/operations/trust-safety pages
 - `lib/` - API client, auth context, query client, formatting helpers
 - `hooks/` - TanStack Query mutations/queries
 - `components/ui/` - small hand-rolled primitives (Radix + Tailwind, no
