@@ -42,7 +42,7 @@ from app.database.models import (
 from app.database.session import get_db
 from app.services.acknowledgement import generate_acknowledgement
 from app.services.notifications import build_patch_notification
-from app.services.routing import route_to_team
+from app.services.routing import reconcile_main_category, route_to_team
 from app.services.sla import compute_sla_due_at
 from app.vector_store.embeddings import get_embedding
 from app.vector_store.retrieval import find_duplicate_complaint, retrieve_similar_feedback
@@ -210,10 +210,19 @@ def _process_feedback_submission(
             # workflow itself (ratings + a completed booking mean it's a
             # Guest Review, full stop) - never left to the AI's judgment,
             # even if a scathing review reads more like a complaint to it.
-            # Everything else (sub_category, sentiment, themes, summary,
-            # priority, recommended_action) still comes from real AI
-            # analysis of the written text.
-            main_category = MainCategory.GUEST_REVIEW if is_review else classification.main_category
+            # For everything else, the model's own main_category can
+            # contradict its own sub_category (e.g. Guest Review paired
+            # with Maintenance) - reconcile_main_category corrects that
+            # using the sub_category's fixed taxonomy group, since letting
+            # it stand would silently skip routing below for a genuinely
+            # actionable complaint. Sentiment, themes, summary, priority,
+            # and recommended_action still come from real AI analysis of
+            # the written text.
+            main_category = (
+                MainCategory.GUEST_REVIEW
+                if is_review
+                else reconcile_main_category(classification.main_category, classification.sub_category)
+            )
             # Routing/SLA only apply to actionable complaints/tickets, not
             # reviews - gated on the final main_category (not is_review),
             # since a no-rating submission can still be AI-classified as

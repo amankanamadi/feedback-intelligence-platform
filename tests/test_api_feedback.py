@@ -104,6 +104,33 @@ def test_submit_feedback_handles_duplicate_themes_from_ai(admin_client, mock_ai)
     assert sorted(body["themes"]) == ["Cleaning Quality", "Dirty Apartment"]
 
 
+def test_submit_feedback_reconciles_contradictory_classification(admin_client, mock_ai):
+    # The model claims Guest Review but Maintenance only ever belongs to
+    # Host Complaint - the stored main_category should be corrected, and
+    # since that flips it out of Guest Review, routing/SLA should now run
+    # too (this exact contradiction previously caused a real maintenance
+    # complaint to never reach the host's queue).
+    mock_ai["classify"].return_value = FeedbackClassification(
+        main_category=MainCategory.GUEST_REVIEW,
+        sub_category=SubCategory.MAINTENANCE,
+        sentiment=Sentiment.NEGATIVE,
+        themes=["Pool Cleanliness"],
+        priority=Priority.MEDIUM,
+        confidence=90,
+        summary="Guest reports the pool is dirty.",
+        recommended_action="Escalate to housekeeping to clean the pool.",
+    )
+
+    response = admin_client.post("/feedback", json={"raw_text": "The swimming pool is dirty."})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["main_category"] == "Host Complaint"
+    assert body["sub_category"] == "Maintenance"
+    assert body["responsible_team"] == "Host"
+    assert body["sla_due_at"] is not None
+
+
 def test_submit_feedback_degrades_gracefully_on_embedding_failure(admin_client, mock_ai):
     mock_ai["get_embedding"].side_effect = RuntimeError("network error")
 
