@@ -7,7 +7,14 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.api.sanitization import sanitize_optional_text, sanitize_required_text
-from app.database.models import FeedbackSource, FeedbackStatus, Priority
+from app.database.models import (
+    FeedbackSource,
+    FeedbackStatus,
+    GuestDecision,
+    MainCategory,
+    Priority,
+    ResponsibleTeam,
+)
 
 # Submission metadata fields - optional, free-text, no fixed vocabulary
 # (unlike `source`, which is a closed channel enum).
@@ -146,10 +153,14 @@ class FeedbackSubmitterRead(BaseModel):
     checkin_rating: Optional[int] = None
     location_rating: Optional[int] = None
     value_rating: Optional[int] = None
+    # The submitter's own accept/reject decision on a proposed resolution
+    # (see POST /feedback/{id}/decision) - their own choice, not an
+    # AI-analysis field, so visible here rather than staff-only.
+    guest_decision: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
-    @field_validator("status", "source", mode="before")
+    @field_validator("status", "source", "guest_decision", mode="before")
     @classmethod
     def _enum_to_value(cls, v):
         return v.value if isinstance(v, enum.Enum) else v
@@ -194,6 +205,12 @@ class FeedbackStaffRead(FeedbackSubmitterRead):
     # Set when semantic duplicate-complaint detection links this item to
     # an earlier, near-identical one on the same property.
     duplicate_of_feedback_id: Optional[int] = None
+    # Flipped when the submitter rejects a proposed resolution (see
+    # POST /feedback/{id}/decision) - staff-only, since it's an
+    # Operations-queue signal, not something the submitter needs a
+    # separate field for (they already know they rejected it).
+    escalated: bool = False
+    escalated_at: Optional[datetime] = None
 
     @field_validator(
         "main_category", "sub_category", "sentiment", "priority", "responsible_team", mode="before"
@@ -214,6 +231,12 @@ class FeedbackAdminUpdate(BaseModel):
     tags: Optional[list[str]] = Field(None, max_length=20)
     internal_notes: Optional[str] = Field(None, max_length=5_000)
     admin_response: Optional[str] = Field(None, max_length=5_000)
+    # Reclassification ("override") and reassignment ("reassign") for
+    # Operations - restricted to MANAGE_ROLES/TRUST_SAFETY at the route
+    # layer, same as every other field here except status/admin_response
+    # (which a host may also set for their own routed items).
+    main_category: Optional[MainCategory] = None
+    responsible_team: Optional[ResponsibleTeam] = None
 
     @field_validator("internal_notes", "admin_response", mode="before")
     @classmethod
@@ -269,3 +292,56 @@ class BookingRead(BaseModel):
     @classmethod
     def _enum_to_value(cls, v):
         return v.value if isinstance(v, enum.Enum) else v
+
+
+class FeedbackDecisionCreate(BaseModel):
+    """A guest's accept/reject decision on a proposed resolution - see
+    POST /feedback/{id}/decision. PENDING is a valid *current-state*
+    default but never a valid submission (there's nothing to "decide" by
+    submitting "still pending")."""
+
+    decision: GuestDecision
+
+    @field_validator("decision")
+    @classmethod
+    def _reject_pending(cls, v: GuestDecision) -> GuestDecision:
+        if v == GuestDecision.PENDING:
+            raise ValueError("decision must be Accepted or Rejected")
+        return v
+
+
+class FeedbackHostRead(FeedbackSubmitterRead):
+    """Shape returned to a HOST viewing their property's complaint queue
+    (GET /feedback/host-queue) - a submitter's own view plus just enough
+    AI context to act on the complaint. Deliberately excludes staff-only
+    workflow bookkeeping (internal_notes, tags), raw AI metadata
+    (confidence, themes), and leadership-framing fields (executive_summary,
+    preventive_recommendation) that aren't the host's business.
+    """
+
+    main_category: Optional[str] = None
+    sub_category: Optional[str] = None
+    sentiment: Optional[str] = None
+    priority: Optional[str] = None
+    recommended_action: Optional[str] = None
+    root_cause: Optional[str] = None
+    business_impact: Optional[str] = None
+    responsible_team: Optional[str] = None
+    sla_due_at: Optional[datetime] = None
+    sla_breached: bool = False
+    duplicate_of_feedback_id: Optional[int] = None
+
+    @field_validator("main_category", "sub_category", "sentiment", "priority", "responsible_team", mode="before")
+    @classmethod
+    def _admin_enum_to_value(cls, v):
+        return v.value if isinstance(v, enum.Enum) else v
+
+
+class NotificationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    message: str
+    link: Optional[str] = None
+    read_at: Optional[datetime] = None
+    created_at: datetime

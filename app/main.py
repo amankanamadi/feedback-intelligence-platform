@@ -13,6 +13,7 @@ from app.api.auth import router as auth_router
 from app.api.bookings import router as bookings_router
 from app.api.feedback import router as feedback_router
 from app.api.feedback_export import router as feedback_export_router
+from app.api.notifications import router as notifications_router
 from app.api.properties import router as properties_router
 from app.api.reports import router as reports_router
 from app.core.config import Settings, get_settings
@@ -53,6 +54,7 @@ app.include_router(reports_router)
 app.include_router(attachments_router)
 app.include_router(properties_router)
 app.include_router(bookings_router)
+app.include_router(notifications_router)
 
 
 @app.exception_handler(OperationalError)

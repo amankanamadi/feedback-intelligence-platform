@@ -11,23 +11,37 @@ from app.api.schemas import (
     BulkFeedbackCreate,
     FeedbackAdminUpdate,
     FeedbackCreate,
+    FeedbackDecisionCreate,
+    FeedbackHostRead,
     FeedbackStaffRead,
     FeedbackSubmitterRead,
 )
 from app.core.config import get_settings
-from app.core.security import RequireManager, STAFF_ROLES, assert_owns_or_staff, get_current_user
+from app.core.security import (
+    MANAGE_ROLES,
+    RequireManager,
+    STAFF_ROLES,
+    assert_owns_or_staff,
+    get_current_user,
+    require_role,
+)
 from app.database import crud
 from app.database.models import (
     Booking,
     BookingStatus,
     Feedback,
     FeedbackSource,
+    FeedbackStatus,
     MainCategory,
+    Priority,
+    ResponsibleTeam,
+    Role,
     Sentiment,
     User,
 )
 from app.database.session import get_db
 from app.services.acknowledgement import generate_acknowledgement
+from app.services.notifications import build_patch_notification
 from app.services.routing import route_to_team
 from app.services.sla import compute_sla_due_at
 from app.vector_store.embeddings import get_embedding
@@ -56,6 +70,19 @@ def _shape_feedback(feedback: Feedback, current_user: User) -> Union[FeedbackSta
     # property_name/property_city aren't direct Feedback attributes, so
     # from_attributes can't pick them up - fill them in from the loaded
     # relationship here instead.
+    shaped.property_name = feedback.property.name if feedback.property else None
+    shaped.property_city = feedback.property.city if feedback.property else None
+    return shaped
+
+
+def _shape_host_feedback(feedback: Feedback) -> FeedbackHostRead:
+    """Shapes a host-queue item - a reduced AI-context view, distinct from
+    both FeedbackSubmitterRead and FeedbackStaffRead (see FeedbackHostRead's
+    docstring). Kept as its own function rather than folded into
+    _shape_feedback, which several other routes rely on staying a strict
+    binary STAFF/else branch.
+    """
+    shaped = FeedbackHostRead.model_validate(feedback)
     shaped.property_name = feedback.property.name if feedback.property else None
     shaped.property_city = feedback.property.city if feedback.property else None
     return shaped
@@ -313,12 +340,23 @@ def list_feedback(
     search: Optional[str] = Query(None, min_length=1, max_length=200),
     source: Optional[FeedbackSource] = Query(None),
     property_id: Optional[int] = Query(None),
+    priority: Optional[Priority] = Query(None),
+    status_: Optional[FeedbackStatus] = Query(None, alias="status"),
+    responsible_team: Optional[ResponsibleTeam] = Query(None),
+    escalated: Optional[bool] = Query(None),
+    sla_breached: Optional[bool] = Query(None),
+    unresolved: Optional[bool] = Query(None),
+    has_duplicates: Optional[bool] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Union[FeedbackStaffRead, FeedbackSubmitterRead]]:
     # A GUEST/HOST caller is always scoped to their own rows here, at the
     # crud layer - never trust a client-supplied filter for this.
     owner_user_id = None if current_user.role in STAFF_ROLES else current_user.id
+    if current_user.role in STAFF_ROLES:
+        # Only staff-facing (unscoped) reads pay for this bulk write - a
+        # GUEST/HOST's own scoped view doesn't even expose sla_breached.
+        crud.flag_overdue_sla_breaches(db)
     items = crud.list_feedback(
         db,
         skip=skip,
@@ -329,8 +367,32 @@ def list_feedback(
         source=source,
         property_id=property_id,
         owner_user_id=owner_user_id,
+        priority=priority,
+        status=status_,
+        responsible_team=responsible_team,
+        escalated=escalated,
+        sla_breached=sla_breached,
+        unresolved=unresolved,
+        has_duplicates=has_duplicates,
     )
     return [_shape_feedback(item, current_user) for item in items]
+
+
+@router.get("/feedback/host-queue", response_model=None)
+def list_host_complaint_queue(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    status_: Optional[FeedbackStatus] = Query(None, alias="status"),
+    current_user: User = Depends(require_role(Role.HOST)),
+    db: Session = Depends(get_db),
+) -> list[FeedbackHostRead]:
+    # Must stay defined before GET /feedback/{feedback_id} below - that
+    # route's path parameter has no type constraint in the path string
+    # itself, so Starlette would otherwise match "host-queue" as a
+    # feedback_id and 422 before this route is ever tried.
+    crud.flag_overdue_sla_breaches(db)
+    items = crud.list_feedback_for_host(db, current_user.id, skip=skip, limit=limit, status=status_)
+    return [_shape_host_feedback(item) for item in items]
 
 
 @router.get("/feedback/{feedback_id}", response_model=None)
@@ -346,17 +408,79 @@ def get_feedback(
     return _shape_feedback(feedback, current_user)
 
 
-@router.patch("/feedback/{feedback_id}", response_model=FeedbackStaffRead)
+_HOST_ALLOWED_PATCH_FIELDS = {"status", "admin_response"}
+
+
+def _assert_can_patch_feedback(feedback: Feedback, *, updates: dict, current_user: User) -> None:
+    """Three tiers of PATCH access: MANAGE_ROLES get full access (unchanged
+    from before this phase); TRUST_SAFETY gets full access but only for
+    items actually routed to them (they resolve their own bypass-queue
+    items, not general power over everything); a property's host gets a
+    restricted subset (status/admin_response only) for their own routed
+    items, and never for Trust & Safety items - that's the bypass, from
+    the host's side.
+    """
+    if current_user.role in MANAGE_ROLES:
+        return
+    if current_user.role == Role.TRUST_SAFETY:
+        if feedback.responsible_team == ResponsibleTeam.TRUST_AND_SAFETY:
+            return
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    if feedback.property is not None and current_user.id == feedback.property.host_id:
+        if feedback.responsible_team == ResponsibleTeam.TRUST_AND_SAFETY:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        if not set(updates).issubset(_HOST_ALLOWED_PATCH_FIELDS):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+
+
+@router.patch("/feedback/{feedback_id}", response_model=None)
 def update_feedback(
     feedback_id: int,
     payload: FeedbackAdminUpdate,
-    current_user: User = Depends(RequireManager),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> FeedbackStaffRead:
+) -> Union[FeedbackStaffRead, FeedbackSubmitterRead]:
     feedback = crud.get_feedback(db, feedback_id)
     if feedback is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    _assert_can_patch_feedback(feedback, updates=updates, current_user=current_user)
+
     updates.pop("tags", None)
-    return crud.update_feedback_admin_fields(db, feedback, tag_names=payload.tags, **updates)
+    updated = crud.update_feedback_admin_fields(db, feedback, tag_names=payload.tags, **updates)
+
+    message = build_patch_notification(
+        status_changed_to_resolved=updates.get("status") == FeedbackStatus.RESOLVED,
+        admin_response_changed=updates.get("admin_response") is not None,
+    )
+    if message is not None and updated.user_id is not None:
+        crud.create_notification(
+            db, user_id=updated.user_id, message=message, link=f"/app/feedback/{updated.id}"
+        )
+
+    return _shape_feedback(updated, current_user)
+
+
+@router.post("/feedback/{feedback_id}/decision", response_model=None)
+def submit_feedback_decision(
+    feedback_id: int,
+    payload: FeedbackDecisionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Union[FeedbackStaffRead, FeedbackSubmitterRead]:
+    feedback = crud.get_feedback(db, feedback_id)
+    if feedback is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
+    if feedback.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    if feedback.admin_response is None or feedback.guest_decision is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No pending resolution to decide on.",
+        )
+
+    updated = crud.apply_guest_decision(db, feedback, payload.decision)
+    return _shape_feedback(updated, current_user)

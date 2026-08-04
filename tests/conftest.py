@@ -170,6 +170,20 @@ def exec_client(_db_override, db_session):
         yield test_client
 
 
+@pytest.fixture
+def trust_safety_client(_db_override, db_session):
+    """Staff tier, in STAFF_ROLES but not MANAGE_ROLES - can PATCH, but
+    only items actually routed to them (responsible_team == TRUST_AND_SAFETY),
+    unlike product_manager_client/exec_client which can never PATCH at all.
+    """
+    from app.database.models import Role
+
+    with _make_staff_client(
+        db_session, email="test-trust-safety@example.com", role=Role.TRUST_SAFETY
+    ) as test_client:
+        yield test_client
+
+
 DEFAULT_CLASSIFICATION = FeedbackClassification(
     main_category=MainCategory.GUEST_REVIEW,
     sub_category=SubCategory.CLEANLINESS,

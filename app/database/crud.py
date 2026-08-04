@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session, aliased
 
 from app.database.models import (
     Attachment,
@@ -13,6 +13,7 @@ from app.database.models import (
     Feedback,
     FeedbackSource,
     FeedbackStatus,
+    GuestDecision,
     MainCategory,
     Notification,
     PasswordResetToken,
@@ -205,6 +206,8 @@ def update_feedback_admin_fields(
     tag_names: list[str] | None = None,
     internal_notes: str | None = None,
     admin_response: str | None = None,
+    main_category: MainCategory | None = None,
+    responsible_team: ResponsibleTeam | None = None,
 ) -> Feedback:
     if status is not None:
         feedback.status = status
@@ -217,6 +220,39 @@ def update_feedback_admin_fields(
     if admin_response is not None:
         feedback.admin_response = admin_response
         feedback.admin_response_at = datetime.now(timezone.utc)
+        # A new proposed resolution supersedes any prior accept/reject -
+        # otherwise a guest who once rejected could never decide again
+        # after a follow-up response (see apply_guest_decision).
+        feedback.guest_decision = None
+    if main_category is not None:
+        feedback.main_category = main_category
+    if responsible_team is not None:
+        feedback.responsible_team = responsible_team
+
+    # Routing/SLA/escalation only ever apply to actionable complaints/
+    # tickets (mirrors the same gate at classification time in
+    # _process_feedback_submission) - enforced unconditionally here so a
+    # reclassification to Guest Review can never leave a stale
+    # responsible_team/sla_due_at/escalated behind.
+    if feedback.main_category == MainCategory.GUEST_REVIEW:
+        feedback.responsible_team = None
+        feedback.sla_due_at = None
+        feedback.escalated = False
+        feedback.escalated_at = None
+
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+
+def apply_guest_decision(db: Session, feedback: Feedback, decision: GuestDecision) -> Feedback:
+    feedback.guest_decision = decision
+    if decision == GuestDecision.ACCEPTED:
+        feedback.status = FeedbackStatus.RESOLVED
+    else:
+        feedback.status = FeedbackStatus.IN_REVIEW
+        feedback.escalated = True
+        feedback.escalated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(feedback)
@@ -237,6 +273,13 @@ def list_feedback(
     source: FeedbackSource | None = None,
     property_id: int | None = None,
     owner_user_id: int | None = None,
+    priority: Priority | None = None,
+    status: FeedbackStatus | None = None,
+    responsible_team: ResponsibleTeam | None = None,
+    escalated: bool | None = None,
+    sla_breached: bool | None = None,
+    unresolved: bool | None = None,
+    has_duplicates: bool | None = None,
 ) -> list[Feedback]:
     stmt = select(Feedback).order_by(Feedback.created_at.desc())
     if main_category is not None:
@@ -254,8 +297,69 @@ def list_feedback(
     # call site gets the same ownership guarantee for free.
     if owner_user_id is not None:
         stmt = stmt.where(Feedback.user_id == owner_user_id)
+    if priority is not None:
+        stmt = stmt.where(Feedback.priority == priority)
+    if status is not None:
+        stmt = stmt.where(Feedback.status == status)
+    if responsible_team is not None:
+        stmt = stmt.where(Feedback.responsible_team == responsible_team)
+    if escalated is not None:
+        stmt = stmt.where(Feedback.escalated == escalated)
+    if sla_breached is not None:
+        stmt = stmt.where(Feedback.sla_breached == sla_breached)
+    if unresolved:
+        stmt = stmt.where(Feedback.status.not_in([FeedbackStatus.RESOLVED, FeedbackStatus.CLOSED]))
+    if has_duplicates is not None:
+        dup = aliased(Feedback)
+        exists_clause = select(1).where(dup.duplicate_of_feedback_id == Feedback.id).exists()
+        stmt = stmt.where(exists_clause if has_duplicates else ~exists_clause)
     stmt = stmt.offset(skip).limit(limit)
     return list(db.scalars(stmt))
+
+
+def list_feedback_for_host(
+    db: Session, host_id: int, *, skip: int = 0, limit: int = 100, status: FeedbackStatus | None = None
+) -> list[Feedback]:
+    """A host's actionable complaint queue - only items actually routed
+    to them (Maintenance-type complaints on their own properties), never
+    every review/complaint about their listings. Safety items are routed
+    to Trust & Safety and never appear here - that's the bypass, from the
+    host's side.
+    """
+    stmt = (
+        select(Feedback)
+        .join(Property, Feedback.property_id == Property.id)
+        .where(Property.host_id == host_id)
+        .where(Feedback.responsible_team == ResponsibleTeam.HOST)
+        .order_by(Feedback.created_at.desc())
+    )
+    if status is not None:
+        stmt = stmt.where(Feedback.status == status)
+    stmt = stmt.offset(skip).limit(limit)
+    return list(db.scalars(stmt))
+
+
+def flag_overdue_sla_breaches(db: Session) -> int:
+    """Bulk-flips sla_breached for any row whose sla_due_at has passed and
+    isn't already flagged/resolved/closed. No scheduler exists in this
+    project, and sla_breached must be a real, filterable column (the
+    Operations queue filters on it) - an on-read lazy bulk UPDATE is the
+    only option that keeps it both correct and queryable without a new
+    infra dependency. Called explicitly from staff-facing routes only,
+    never from a GUEST/HOST's own scoped reads.
+    """
+    now = datetime.now(timezone.utc)
+    stmt = (
+        update(Feedback)
+        .where(Feedback.sla_due_at.is_not(None))
+        .where(Feedback.sla_due_at < now)
+        .where(Feedback.sla_breached.is_(False))
+        .where(Feedback.status.not_in([FeedbackStatus.RESOLVED, FeedbackStatus.CLOSED]))
+        .values(sla_breached=True)
+    )
+    result = db.execute(stmt)
+    db.commit()
+    return result.rowcount
 
 
 def create_attachment(
@@ -418,6 +522,17 @@ def list_notifications_for_user(
         stmt = stmt.where(Notification.read_at.is_(None))
     stmt = stmt.order_by(Notification.created_at.desc()).limit(limit)
     return list(db.scalars(stmt))
+
+
+def get_notification(db: Session, notification_id: int) -> Notification | None:
+    return db.get(Notification, notification_id)
+
+
+def mark_notification_read(db: Session, notification: Notification) -> Notification:
+    notification.read_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(notification)
+    return notification
 
 
 def add_to_wishlist(db: Session, *, guest_id: int, property_id: int) -> Wishlist:

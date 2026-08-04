@@ -20,6 +20,7 @@ SUBMITTER_FACING_FIELDS = {
     "checkin_rating",
     "location_rating",
     "value_rating",
+    "guest_decision",
     "created_at",
     "updated_at",
 }
@@ -51,6 +52,8 @@ STAFF_ONLY_FIELDS = {
     "sla_due_at",
     "sla_breached",
     "duplicate_of_feedback_id",
+    "escalated",
+    "escalated_at",
 }
 
 
