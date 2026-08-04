@@ -180,7 +180,24 @@ class FeedbackStaffRead(FeedbackSubmitterRead):
     browser: Optional[str] = None
     platform: Optional[str] = None
 
-    @field_validator("main_category", "sub_category", "sentiment", "priority", mode="before")
+    # Expanded complaint/ticket AI analysis - populated only when
+    # main_category is Host Complaint or Support Ticket (see
+    # app/api/feedback.py::_process_feedback_submission), null for a
+    # Guest Review.
+    root_cause: Optional[str] = None
+    business_impact: Optional[str] = None
+    executive_summary: Optional[str] = None
+    preventive_recommendation: Optional[str] = None
+    responsible_team: Optional[str] = None
+    sla_due_at: Optional[datetime] = None
+    sla_breached: bool = False
+    # Set when semantic duplicate-complaint detection links this item to
+    # an earlier, near-identical one on the same property.
+    duplicate_of_feedback_id: Optional[int] = None
+
+    @field_validator(
+        "main_category", "sub_category", "sentiment", "priority", "responsible_team", mode="before"
+    )
     @classmethod
     def _admin_enum_to_value(cls, v):
         return v.value if isinstance(v, enum.Enum) else v

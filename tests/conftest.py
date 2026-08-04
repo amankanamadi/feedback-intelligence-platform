@@ -195,10 +195,16 @@ def mock_ai(monkeypatch):
     embedding_mock = MagicMock(return_value=[0.0] * 1536)
     retrieve_mock = MagicMock(return_value=[])
     store_mock = MagicMock(return_value=None)
+    # get_embedding returns a constant vector for every test, so an
+    # unmocked find_duplicate_complaint would run a real, degenerate
+    # zero-vector similarity query for any test submitting two same-
+    # property items - default it to "no duplicate found".
+    duplicate_mock = MagicMock(return_value=None)
 
     monkeypatch.setattr(feedback_module, "classify_feedback", classify_mock)
     monkeypatch.setattr(feedback_module, "get_embedding", embedding_mock)
     monkeypatch.setattr(feedback_module, "retrieve_similar_feedback", retrieve_mock)
+    monkeypatch.setattr(feedback_module, "find_duplicate_complaint", duplicate_mock)
     monkeypatch.setattr(feedback_module.crud, "set_embedding", store_mock)
 
     return {
@@ -206,4 +212,5 @@ def mock_ai(monkeypatch):
         "get_embedding": embedding_mock,
         "retrieve": retrieve_mock,
         "store": store_mock,
+        "find_duplicate": duplicate_mock,
     }

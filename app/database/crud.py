@@ -18,6 +18,7 @@ from app.database.models import (
     PasswordResetToken,
     Priority,
     Property,
+    ResponsibleTeam,
     Role,
     Sentiment,
     SubCategory,
@@ -147,6 +148,12 @@ def apply_classification(
     summary: str,
     theme_names: list[str],
     recommended_action: str | None = None,
+    root_cause: str | None = None,
+    business_impact: str | None = None,
+    executive_summary: str | None = None,
+    preventive_recommendation: str | None = None,
+    responsible_team: ResponsibleTeam | None = None,
+    sla_due_at=None,
 ) -> Feedback:
     feedback.main_category = main_category
     feedback.sub_category = sub_category
@@ -155,6 +162,12 @@ def apply_classification(
     feedback.confidence = confidence
     feedback.summary = summary
     feedback.recommended_action = recommended_action
+    feedback.root_cause = root_cause
+    feedback.business_impact = business_impact
+    feedback.executive_summary = executive_summary
+    feedback.preventive_recommendation = preventive_recommendation
+    feedback.responsible_team = responsible_team
+    feedback.sla_due_at = sla_due_at
     feedback.themes = _resolve_themes(db, theme_names)
 
     db.commit()
@@ -171,6 +184,13 @@ def set_embedding(db: Session, feedback: Feedback, embedding: list[float]) -> Fe
 
 def set_acknowledgement(db: Session, feedback: Feedback, acknowledgement: str) -> Feedback:
     feedback.acknowledgement = acknowledgement
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+
+def set_duplicate_of(db: Session, feedback: Feedback, duplicate_of_feedback_id: int) -> Feedback:
+    feedback.duplicate_of_feedback_id = duplicate_of_feedback_id
     db.commit()
     db.refresh(feedback)
     return feedback

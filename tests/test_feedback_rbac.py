@@ -43,6 +43,14 @@ STAFF_ONLY_FIELDS = {
     "device",
     "browser",
     "platform",
+    "root_cause",
+    "business_impact",
+    "executive_summary",
+    "preventive_recommendation",
+    "responsible_team",
+    "sla_due_at",
+    "sla_breached",
+    "duplicate_of_feedback_id",
 }
 
 

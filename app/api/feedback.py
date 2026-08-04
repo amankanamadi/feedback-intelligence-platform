@@ -28,8 +28,10 @@ from app.database.models import (
 )
 from app.database.session import get_db
 from app.services.acknowledgement import generate_acknowledgement
+from app.services.routing import route_to_team
+from app.services.sla import compute_sla_due_at
 from app.vector_store.embeddings import get_embedding
-from app.vector_store.retrieval import retrieve_similar_feedback
+from app.vector_store.retrieval import find_duplicate_complaint, retrieve_similar_feedback
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,23 @@ def _validate_property_id(db: Session, property_id: Optional[int]) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Property {property_id} not found")
 
 
+def _assert_can_submit_for_booking(booking: Booking, *, is_review: bool, current_user: User) -> None:
+    """A booking's guest may always submit against it (review or
+    complaint); staff may always act on behalf of anyone. A host may file
+    a complaint about their own property's booking (e.g. "this guest
+    trashed my place") but may never submit a *review* for it - reviews
+    are guest-only by definition, and letting a host rate their own
+    listing would corrupt the guest-only average_rating guarantee.
+    """
+    if current_user.role in STAFF_ROLES:
+        return
+    if current_user.id == booking.guest_id:
+        return
+    if not is_review and current_user.id == booking.property.host_id:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+
+
 def _validate_booking(
     db: Session, booking_id: Optional[int], *, is_review: bool, current_user: User
 ) -> Optional[Booking]:
@@ -78,7 +97,7 @@ def _validate_booking(
     booking = crud.get_booking(db, booking_id)
     if booking is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Booking {booking_id} not found")
-    assert_owns_or_staff(booking.guest_id, current_user)
+    _assert_can_submit_for_booking(booking, is_review=is_review, current_user=current_user)
 
     if is_review:
         if booking.status != BookingStatus.COMPLETED:
@@ -135,9 +154,18 @@ def _process_feedback_submission(
 
     embedding = None
     similar_examples: list[dict] = []
+    duplicate_of_feedback_id: Optional[int] = None
     try:
         embedding = get_embedding(payload.raw_text)
         similar_examples = retrieve_similar_feedback(db, embedding, n_results=3, exclude_id=feedback.id)
+        # Only complaint-style submissions can be "duplicates" of an
+        # earlier one, and only within the same listing.
+        if not is_review and property_id is not None:
+            duplicate_match = find_duplicate_complaint(
+                db, embedding, property_id=property_id, exclude_id=feedback.id
+            )
+            if duplicate_match is not None:
+                duplicate_of_feedback_id = duplicate_match["id"]
     except Exception:
         logger.exception(
             "Embedding/retrieval failed for feedback %s; classifying without RAG context",
@@ -159,6 +187,15 @@ def _process_feedback_submission(
             # priority, recommended_action) still comes from real AI
             # analysis of the written text.
             main_category = MainCategory.GUEST_REVIEW if is_review else classification.main_category
+            # Routing/SLA only apply to actionable complaints/tickets, not
+            # reviews - gated on the final main_category (not is_review),
+            # since a no-rating submission can still be AI-classified as
+            # a Guest Review on its own.
+            responsible_team = None
+            sla_due_at = None
+            if main_category != MainCategory.GUEST_REVIEW:
+                responsible_team = route_to_team(classification.sub_category)
+                sla_due_at = compute_sla_due_at(classification.priority)
             feedback = crud.apply_classification(
                 db,
                 feedback,
@@ -170,6 +207,12 @@ def _process_feedback_submission(
                 summary=classification.summary,
                 theme_names=classification.themes,
                 recommended_action=classification.recommended_action,
+                root_cause=classification.root_cause,
+                business_impact=classification.business_impact,
+                executive_summary=classification.executive_summary,
+                preventive_recommendation=classification.preventive_recommendation,
+                responsible_team=responsible_team,
+                sla_due_at=sla_due_at,
             )
         except Exception:
             db.rollback()
@@ -188,6 +231,12 @@ def _process_feedback_submission(
             crud.set_embedding(db, feedback, embedding)
         except Exception:
             logger.exception("Embedding storage failed for feedback %s", feedback.id)
+
+    if duplicate_of_feedback_id is not None:
+        try:
+            feedback = crud.set_duplicate_of(db, feedback, duplicate_of_feedback_id)
+        except Exception:
+            logger.exception("Duplicate-link storage failed for feedback %s", feedback.id)
 
     return feedback
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -52,3 +54,33 @@ def retrieve_similar_feedback(
         }
         hits.append({"text": feedback.raw_text, "metadata": metadata, "distance": float(dist)})
     return hits
+
+
+def find_duplicate_complaint(
+    db: Session, embedding: list[float], *, property_id: int, exclude_id: int
+) -> Optional[dict]:
+    """Whether a near-identical complaint already exists for this property.
+
+    Uses a much tighter distance threshold than retrieve_similar_feedback
+    (that one answers "what's loosely related, for RAG context"; this one
+    answers "is this the same complaint someone already filed"), and is
+    scoped to the same property - a "duplicate" only makes sense within
+    the same listing.
+    """
+    settings = get_settings()
+    db.execute(text(f"SET LOCAL statement_timeout = {int(settings.rag_query_timeout_ms)}"))
+
+    distance_expr = Feedback.embedding.cosine_distance(embedding)
+    stmt = (
+        select(Feedback.id, distance_expr.label("distance"))
+        .where(Feedback.embedding.isnot(None))
+        .where(Feedback.property_id == property_id)
+        .where(Feedback.id != exclude_id)
+        .where(distance_expr < settings.duplicate_detection_max_distance)
+        .order_by(distance_expr)
+        .limit(1)
+    )
+    row = db.execute(stmt).first()
+    if row is None:
+        return None
+    return {"id": row.id, "distance": float(row.distance)}

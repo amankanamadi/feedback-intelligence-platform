@@ -18,6 +18,14 @@ assign a priority based on business impact and urgency, estimate your confidence
 (0-100), write a one-sentence summary, and recommend a short, concrete next step
 for the ops team to take (recommended_action).
 
+For Host Complaint and Support Ticket only, also provide: root_cause (the
+underlying reason this happened, not just a restatement of the symptom),
+business_impact (concrete consequence for the guest/host/platform if
+unaddressed), executive_summary (a one-sentence leadership-level framing of
+the issue and its stakes), and preventive_recommendation (a concrete change
+that would stop this class of issue recurring). For Guest Review, leave all
+four of these fields null - a review has no operational issue to root-cause.
+
 Main Category: Guest Review
   Sub Categories: Cleanliness, WiFi, Check-in, Amenities, Host Communication
 
@@ -49,7 +57,18 @@ Sentiment guidance for tricky cases:
 
 
 def _example(
-    main_category, sub_category, sentiment, themes, priority, confidence, summary, recommended_action
+    main_category,
+    sub_category,
+    sentiment,
+    themes,
+    priority,
+    confidence,
+    summary,
+    recommended_action,
+    root_cause=None,
+    business_impact=None,
+    executive_summary=None,
+    preventive_recommendation=None,
 ) -> str:
     return FeedbackClassification(
         main_category=main_category,
@@ -60,6 +79,10 @@ def _example(
         confidence=confidence,
         summary=summary,
         recommended_action=recommended_action,
+        root_cause=root_cause,
+        business_impact=business_impact,
+        executive_summary=executive_summary,
+        preventive_recommendation=preventive_recommendation,
     ).model_dump_json()
 
 
@@ -143,6 +166,14 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
             "guests at risk.",
             "Escalate to Trust & Safety immediately and dispatch a locksmith to repair "
             "the lock today.",
+            root_cause="The smart lock's hardware failed and was not replaced or repaired "
+            "promptly by the host.",
+            business_impact="Guests are physically unsafe and the platform is exposed to "
+            "serious liability until the lock is fixed.",
+            executive_summary="An unsecured front door at an active listing poses an "
+            "immediate guest-safety risk.",
+            preventive_recommendation="Require hosts to enroll smart locks in a monitored "
+            "maintenance program with automated failure alerts.",
         ),
     ),
     (
@@ -158,6 +189,14 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
             "Host reports significant property damage after guests held an unauthorized party.",
             "Open a damage claim, document the damage with photos, and charge the "
             "responsible guest's security deposit.",
+            root_cause="Guests violated the listing's no-party policy, causing damage "
+            "beyond normal wear and tear.",
+            business_impact="The host bears repair costs and lost booking availability "
+            "until the damage is resolved.",
+            executive_summary="An unauthorized party caused property damage requiring a "
+            "formal damage claim against the guest.",
+            preventive_recommendation="Strengthen party-detection signals (noise monitors, "
+            "guest-count verification) and enforce security deposits for high-risk bookings.",
         ),
     ),
     (
@@ -173,6 +212,14 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
             "Guest is still waiting on a refund two weeks after a host-cancelled trip.",
             "Escalate to the payments team to process the overdue refund within 24 "
             "hours and notify the guest.",
+            root_cause="The refund was never triggered after the host's cancellation, "
+            "likely due to a missed manual processing step.",
+            business_impact="A two-week unresolved refund erodes guest trust and risks a "
+            "chargeback or platform complaint.",
+            executive_summary="A guest has waited two weeks for a refund after a "
+            "host-side cancellation, indicating a gap in the refund process.",
+            preventive_recommendation="Automate refund issuance immediately on "
+            "host-initiated cancellations instead of relying on manual follow-up.",
         ),
     ),
     (
@@ -189,6 +236,14 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
             "after reinstalling.",
             "File a bug report with the mobile engineering team and ask the guest for "
             "their device model and OS version.",
+            root_cause="A likely bug in the messaging screen crashes the app, since "
+            "reinstalling did not resolve it.",
+            business_impact="The guest cannot communicate with their host, which can "
+            "delay check-in coordination and increase support volume.",
+            executive_summary="A reproducible messaging crash is blocking guest-host "
+            "communication in the mobile app.",
+            preventive_recommendation="Add crash reporting and regression tests around "
+            "the messaging screen to catch this class of bug before release.",
         ),
     ),
     (
@@ -204,6 +259,14 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
             "Guest requests the ability to filter search results by pet-friendly "
             "listings with a pool.",
             "Log the request with the product team as a candidate search filter enhancement.",
+            root_cause="Search filters don't currently support combining amenity "
+            "attributes like pet-friendly and pool.",
+            business_impact="Guests with specific needs spend extra time manually "
+            "checking listings, which can lower conversion.",
+            executive_summary="Guests want combinable amenity filters that the search "
+            "experience doesn't yet support.",
+            preventive_recommendation="Prioritize combinable amenity filtering in the "
+            "next search experience roadmap review.",
         ),
     ),
     (
@@ -220,6 +283,14 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
             "such incident.",
             "Escalate to the booking experience team to review the host's cancellation "
             "pattern and offer the guest rebooking assistance.",
+            root_cause="A repeat pattern of last-minute host cancellations suggests "
+            "insufficient enforcement of the cancellation policy for this host.",
+            business_impact="Repeated last-minute cancellations disrupt guest travel "
+            "plans and put the platform's reliability reputation at risk.",
+            executive_summary="A guest has experienced three last-minute cancellations, "
+            "pointing to an unaddressed host reliability issue.",
+            preventive_recommendation="Flag hosts with repeat late cancellations for "
+            "review and apply stricter cancellation penalties.",
         ),
     ),
 ]

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     rag_max_distance: float = 1.0
     rag_query_timeout_ms: int = 2000
 
+    # Much tighter than rag_max_distance: this is "is this the same
+    # complaint" (near-identical text), not "is this loosely related".
+    duplicate_detection_max_distance: float = 0.15
+
     # Defends against an oversized upload before row-parsing even happens.
     bulk_upload_max_file_bytes: int = 2_000_000
 
