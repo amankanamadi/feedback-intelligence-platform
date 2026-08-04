@@ -10,7 +10,12 @@ export function useUpdateFeedbackMutation(feedbackId: number) {
       apiFetch<FeedbackAdmin>(`/feedback/${feedbackId}`, { method: "PATCH", body: JSON.stringify(payload) }),
     onSuccess: (updated) => {
       queryClient.setQueryData(["feedback", "detail", feedbackId], updated);
-      queryClient.invalidateQueries({ queryKey: ["feedback", "list"] });
+      // Broad "feedback"-prefixed invalidate, not just ["feedback","list"] -
+      // this PATCH is also consumed by the host queue
+      // (["feedback","host-queue",...]), which wouldn't match a
+      // ["feedback","list"]-scoped invalidate under react-query's default
+      // prefix matching.
+      queryClient.invalidateQueries({ queryKey: ["feedback"] });
     },
   });
 }

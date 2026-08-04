@@ -40,6 +40,10 @@ const STAFF_ONLY_SEGMENTS = [
   "/app/audit-logs",
 ];
 
+// Same defense-in-depth rationale as STAFF_ONLY_SEGMENTS, for the one
+// host-only page.
+const HOST_ONLY_SEGMENTS = ["/app/host"];
+
 async function fetchMe(cookieHeader: string | null): Promise<Me> {
   if (!cookieHeader) return null;
   try {
@@ -79,6 +83,9 @@ export async function proxy(request: NextRequest) {
   if (isUnderSegment(pathname, "/app")) {
     if (!me) return redirectToLogin(request);
     if (STAFF_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && !STAFF_ROLES.has(me.role)) {
+      return NextResponse.redirect(new URL(APP_HOME, request.url));
+    }
+    if (HOST_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && me.role !== "HOST") {
       return NextResponse.redirect(new URL(APP_HOME, request.url));
     }
   }

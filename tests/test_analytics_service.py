@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from app.analytics.service import get_analytics_summary, get_notable_feedback, get_theme_frequencies
+from app.analytics.service import get_analytics_summary, get_host_performance, get_notable_feedback, get_theme_frequencies
 from app.core.security import hash_password
 from app.database import crud
 from app.database.models import (
@@ -487,6 +487,52 @@ def test_host_performance_score_reflects_sla_escalation_and_rating_inputs(db_ses
     # avg_sentiment_score=1.0 (all positive) -> 100; -5 (sla) -5 (escalated)
     # + (5-3)*20=40 rating bonus = 130.0
     assert host.performance_score == 130.0
+
+
+def test_get_host_performance_matches_get_analytics_summary_formula(db_session):
+    # Same fixture as test_host_performance_score_reflects_sla_escalation_and_rating_inputs
+    # above - proving get_host_performance reuses the exact same formula,
+    # not a reimplementation that could drift from it.
+    host_id = _seed_host_user(db_session, email="scored-host-2@example.com")
+    property_row = _seed_property(db_session, host_id=host_id)
+    booking = crud.create_booking(
+        db_session, confirmation_code="ANALYTICS-HOST-002", guest_id=host_id, property_id=property_row.id,
+        check_in_date=datetime.now(timezone.utc).date(), check_out_date=datetime.now(timezone.utc).date(),
+    )
+    feedback = crud.create_feedback(
+        db_session, raw_text="Great stay.", property_id=property_row.id, booking_id=booking.id, overall_rating=5,
+    )
+    feedback.sentiment = Sentiment.POSITIVE
+    feedback.sla_breached = True
+    feedback.escalated = True
+    db_session.commit()
+
+    result = get_host_performance(db_session, host_id)
+
+    assert result is not None
+    assert result.sla_breached_count == 1
+    assert result.escalated_count == 1
+    assert result.avg_guest_rating == 5.0
+    assert result.performance_score == 130.0
+
+
+def test_get_host_performance_none_for_host_with_zero_properties(db_session):
+    host_id = _seed_host_user(db_session, email="empty-host@example.com")
+
+    assert get_host_performance(db_session, host_id) is None
+
+
+def test_get_host_performance_zeroed_for_host_with_property_but_no_feedback(db_session):
+    host_id = _seed_host_user(db_session, email="new-host@example.com")
+    _seed_property(db_session, host_name="New Host", host_id=host_id)
+
+    result = get_host_performance(db_session, host_id)
+
+    assert result is not None
+    assert result.feedback_count == 0
+    assert result.host_name == "New Host"
+    assert result.performance_score == 0.0
+    assert result.avg_guest_rating is None
 
 
 def test_feature_request_trend_only_counts_feature_request_subcategory(db_session):

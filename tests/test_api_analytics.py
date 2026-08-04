@@ -1,5 +1,18 @@
+from datetime import datetime, timedelta, timezone
+
+from app.core.security import hash_password
 from app.database import crud
-from app.database.models import MainCategory, Priority, Sentiment, SubCategory
+from app.database.models import (
+    Feedback,
+    FeedbackStatus,
+    MainCategory,
+    Priority,
+    Property,
+    PropertyType,
+    Role,
+    Sentiment,
+    SubCategory,
+)
 
 
 def _seed(db_session, raw_text, main_category, sentiment, themes, sub_category=SubCategory.CLEANLINESS):
@@ -78,3 +91,97 @@ def test_themes_endpoint_respects_limit(admin_client, db_session):
 
     assert response.status_code == 200
     assert len(response.json()) == 2
+
+
+def test_host_performance_forbidden_for_guest(user_client):
+    response = user_client.get("/analytics/host-performance")
+
+    assert response.status_code == 403
+
+
+def test_host_performance_forbidden_for_staff(admin_client):
+    response = admin_client.get("/analytics/host-performance")
+
+    assert response.status_code == 403
+
+
+def test_host_performance_returns_null_for_host_with_no_properties(host_client):
+    response = host_client.get("/analytics/host-performance")
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_host_performance_returns_zeroed_object_for_host_with_property_but_no_feedback(host_client, db_session):
+    host = host_client.get("/auth/me").json()
+    property_row = Property(
+        name="New Listing", host_name="New Host", host_id=host["id"], city="Miami", country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    db_session.add(property_row)
+    db_session.commit()
+
+    response = host_client.get("/analytics/host-performance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["feedback_count"] == 0
+    assert body["performance_score"] == 0.0
+    assert body["host_name"] == "New Host"
+    assert body["host_id"] == host["id"]
+
+
+def test_host_performance_scoped_to_caller_only(host_client, db_session):
+    host = host_client.get("/auth/me").json()
+    other_host_id = crud.create_user(
+        db_session, email="other-host@example.com", hashed_password=hash_password("test-password-123"),
+        role=Role.HOST,
+    ).id
+
+    my_property = Property(
+        name="Mine", host_name="Me", host_id=host["id"], city="Austin", country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    other_property = Property(
+        name="Not Mine", host_name="Other Host", host_id=other_host_id, city="Denver", country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    db_session.add_all([my_property, other_property])
+    db_session.commit()
+
+    crud.create_feedback(db_session, raw_text="feedback about mine", property_id=my_property.id)
+    crud.create_feedback(db_session, raw_text="feedback about other 1", property_id=other_property.id)
+    crud.create_feedback(db_session, raw_text="feedback about other 2", property_id=other_property.id)
+
+    response = host_client.get("/analytics/host-performance")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["host_id"] == host["id"]
+    assert body["feedback_count"] == 1
+
+
+def test_host_performance_flags_overdue_sla_before_counting(host_client, db_session):
+    host = host_client.get("/auth/me").json()
+    property_row = Property(
+        name="Listing", host_name="Host", host_id=host["id"], city="Austin", country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    db_session.add(property_row)
+    db_session.commit()
+
+    feedback = Feedback(
+        raw_text="Overdue complaint.",
+        property_id=property_row.id,
+        main_category=MainCategory.HOST_COMPLAINT,
+        priority=Priority.HIGH,
+        status=FeedbackStatus.NEW,
+        sla_due_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    db_session.add(feedback)
+    db_session.commit()
+
+    response = host_client.get("/analytics/host-performance")
+
+    assert response.status_code == 200
+    assert response.json()["sla_breached_count"] == 1

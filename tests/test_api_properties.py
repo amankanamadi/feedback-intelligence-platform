@@ -1,4 +1,12 @@
-from app.database.models import Property, PropertyType
+from app.core.security import hash_password
+from app.database import crud
+from app.database.models import Property, PropertyType, Role
+
+
+def _seed_host_user(db_session, *, email):
+    return crud.create_user(
+        db_session, email=email, hashed_password=hash_password("test-password-123"), role=Role.HOST
+    ).id
 
 
 def _seed_properties(db_session):
@@ -84,6 +92,63 @@ def test_list_properties_respects_pagination(user_client, db_session):
 
 def test_list_properties_empty_when_no_properties_seeded(user_client):
     response = user_client.get("/properties")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_properties_filters_by_host_id(user_client, db_session):
+    host_id = _seed_host_user(db_session, email="host-a@example.com")
+    other_host_id = _seed_host_user(db_session, email="host-b@example.com")
+    owned = Property(
+        name="My Listing", host_name="Jordan Lee", host_id=host_id, city="Austin", country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    other = Property(
+        name="Someone Else's Listing", host_name="Alex Rivera", host_id=other_host_id, city="Denver", country="USA",
+        property_type=PropertyType.PRIVATE_ROOM,
+    )
+    db_session.add_all([owned, other])
+    db_session.commit()
+
+    response = user_client.get("/properties", params={"host_id": host_id})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["name"] == "My Listing"
+
+
+def test_list_properties_host_id_combines_with_search_as_and(user_client, db_session):
+    host_id = _seed_host_user(db_session, email="host-a@example.com")
+    other_host_id = _seed_host_user(db_session, email="host-b@example.com")
+    matching = Property(
+        name="Sunny Spot", host_name="Jordan Lee", host_id=host_id, city="Austin", country="USA",
+        property_type=PropertyType.ENTIRE_HOME,
+    )
+    wrong_host = Property(
+        name="Sunny Cabin", host_name="Alex Rivera", host_id=other_host_id, city="Denver", country="USA",
+        property_type=PropertyType.PRIVATE_ROOM,
+    )
+    right_host_no_match = Property(
+        name="Rainy Studio", host_name="Jordan Lee", host_id=host_id, city="Austin", country="USA",
+        property_type=PropertyType.SHARED_ROOM,
+    )
+    db_session.add_all([matching, wrong_host, right_host_no_match])
+    db_session.commit()
+
+    response = user_client.get("/properties", params={"host_id": host_id, "search": "sunny"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["name"] == "Sunny Spot"
+
+
+def test_list_properties_unknown_host_id_returns_empty(user_client, db_session):
+    _seed_properties(db_session)
+
+    response = user_client.get("/properties", params={"host_id": 999999})
 
     assert response.status_code == 200
     assert response.json() == []

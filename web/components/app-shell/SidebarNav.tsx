@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   FileClock,
+  Home,
   Inbox,
   MessageSquarePlus,
   Settings,
@@ -13,6 +14,7 @@ import {
   User,
   Users,
 } from "lucide-react";
+import { useIsHost } from "@/hooks/use-is-host";
 import { useIsStaff } from "@/hooks/use-is-staff";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +27,7 @@ type NavItem = {
 type NavGroup = {
   label?: string;
   staffOnly?: boolean;
+  hostOnly?: boolean;
   items: NavItem[];
 };
 
@@ -37,6 +40,11 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/app/feedback", label: "Feedback", icon: Inbox },
       { href: "/app/profile", label: "Profile", icon: User },
     ],
+  },
+  {
+    label: "Host",
+    hostOnly: true,
+    items: [{ href: "/app/host", label: "Host Dashboard", icon: Home }],
   },
   {
     label: "Analytics",
@@ -72,11 +80,12 @@ function findActiveHref(pathname: string): string | null {
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const isStaff = useIsStaff();
+  const isHost = useIsHost();
   const activeHref = findActiveHref(pathname);
 
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 pb-6">
-      {NAV_GROUPS.filter((group) => !group.staffOnly || isStaff).map((group, index) => (
+      {NAV_GROUPS.filter((group) => (!group.staffOnly || isStaff) && (!group.hostOnly || isHost)).map((group, index) => (
         <div key={group.label ?? index} className="flex flex-col gap-1">
           {group.label && (
             <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>

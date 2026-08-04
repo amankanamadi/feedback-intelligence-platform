@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
@@ -36,6 +37,35 @@ CONFIDENCE_BUCKET_ORDER = ["0-20", "21-40", "41-60", "61-80", "81-100"]
 # Statuses that mean a case is no longer "open" - used by the safety-alert
 # and property-health penalty computations below.
 _CLOSED_STATUSES = (FeedbackStatus.RESOLVED, FeedbackStatus.CLOSED)
+
+# Module-level (not per-call) since they're static SQL expressions with no
+# parameters - shared between get_analytics_summary's host_performance
+# computation and get_host_performance below, so the two never drift.
+_SENTIMENT_SCORE_EXPR = case(
+    (Feedback.sentiment == Sentiment.POSITIVE, 1),
+    (Feedback.sentiment == Sentiment.NEGATIVE, -1),
+    else_=0,
+)
+_OPEN_CRITICAL_CASE_EXPR = case(
+    (and_(Feedback.priority == Priority.CRITICAL, Feedback.status.not_in(_CLOSED_STATUSES)), 1),
+    else_=0,
+)
+_SLA_BREACHED_CASE_EXPR = case((Feedback.sla_breached.is_(True), 1), else_=0)
+_ESCALATED_CASE_EXPR = case((Feedback.escalated.is_(True), 1), else_=0)
+
+
+def _host_performance_score(
+    *, avg_sentiment_score: float | None, open_critical: int, sla_breached_count: int,
+    escalated_count: int, avg_guest_rating: float | None,
+) -> float:
+    return round(
+        (avg_sentiment_score if avg_sentiment_score is not None else 0.0) * 100
+        - 10 * open_critical
+        - 5 * sla_breached_count
+        - 5 * escalated_count
+        + (0.0 if avg_guest_rating is None else (avg_guest_rating - 3) * 20),
+        1,
+    )
 
 
 def get_analytics_summary(db: Session, since: datetime | None = None) -> AnalyticsSummary:
@@ -157,7 +187,6 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
         ),
         else_=0,
     )
-    sla_breached_case_expr = case((Feedback.sla_breached.is_(True), 1), else_=0)
     property_stmt = (
         select(
             Property.id,
@@ -168,35 +197,22 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
             func.sum(case((Feedback.sentiment == Sentiment.NEGATIVE, 1), else_=0)),
             func.sum(open_safety_case_expr),
             func.sum(open_maintenance_case_expr),
-            func.sum(sla_breached_case_expr),
+            func.sum(_SLA_BREACHED_CASE_EXPR),
             func.avg(Feedback.cleanliness_rating),
         )
         .join(Property, Feedback.property_id == Property.id)
         .group_by(Property.id, Property.name, Property.city)
     )
 
-    sentiment_score_expr = case(
-        (Feedback.sentiment == Sentiment.POSITIVE, 1),
-        (Feedback.sentiment == Sentiment.NEGATIVE, -1),
-        else_=0,
-    )
-    open_critical_case_expr = case(
-        (
-            and_(Feedback.priority == Priority.CRITICAL, Feedback.status.not_in(_CLOSED_STATUSES)),
-            1,
-        ),
-        else_=0,
-    )
-    escalated_case_expr = case((Feedback.escalated.is_(True), 1), else_=0)
     host_stmt = (
         select(
             Property.host_id,
             func.max(Property.host_name),
             func.count(Feedback.id),
-            func.avg(sentiment_score_expr),
-            func.sum(open_critical_case_expr),
-            func.sum(sla_breached_case_expr),
-            func.sum(escalated_case_expr),
+            func.avg(_SENTIMENT_SCORE_EXPR),
+            func.sum(_OPEN_CRITICAL_CASE_EXPR),
+            func.sum(_SLA_BREACHED_CASE_EXPR),
+            func.sum(_ESCALATED_CASE_EXPR),
             func.avg(Feedback.overall_rating),
         )
         .join(Property, Feedback.property_id == Property.id)
@@ -302,13 +318,12 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
             sla_breached_count=sla_breached_count or 0,
             escalated_count=escalated_count or 0,
             avg_guest_rating=round(float(avg_guest_rating), 2) if avg_guest_rating is not None else None,
-            performance_score=round(
-                (float(avg_score) if avg_score is not None else 0.0) * 100
-                - 10 * (open_critical or 0)
-                - 5 * (sla_breached_count or 0)
-                - 5 * (escalated_count or 0)
-                + (0.0 if avg_guest_rating is None else (float(avg_guest_rating) - 3) * 20),
-                1,
+            performance_score=_host_performance_score(
+                avg_sentiment_score=float(avg_score) if avg_score is not None else None,
+                open_critical=open_critical or 0,
+                sla_breached_count=sla_breached_count or 0,
+                escalated_count=escalated_count or 0,
+                avg_guest_rating=float(avg_guest_rating) if avg_guest_rating is not None else None,
             ),
         )
         for (
@@ -392,6 +407,71 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
         feature_request_trend=feature_request_trend,
         complaint_heatmap=complaint_heatmap,
         weekly_sentiment_trend=weekly_sentiment_trend,
+    )
+
+
+def get_host_performance(db: Session, host_id: int) -> Optional[HostPerformance]:
+    """A single host's own Host Performance Score - scoped up front (not
+    computed for every host then filtered), for GET /analytics/host-performance.
+
+    The underlying aggregate joins through Feedback, so a host with
+    properties but zero feedback ever produces no row - not the same as a
+    host with zero properties at all. Falls back to a direct Property
+    lookup for the display name in that case, returning a zeroed score
+    rather than None (a host who owns a property with no history yet is a
+    real, valid state - only "no properties at all" is None).
+    """
+    crud.flag_overdue_sla_breaches(db)
+
+    stmt = (
+        select(
+            Property.host_id,
+            func.max(Property.host_name),
+            func.count(Feedback.id),
+            func.avg(_SENTIMENT_SCORE_EXPR),
+            func.sum(_OPEN_CRITICAL_CASE_EXPR),
+            func.sum(_SLA_BREACHED_CASE_EXPR),
+            func.sum(_ESCALATED_CASE_EXPR),
+            func.avg(Feedback.overall_rating),
+        )
+        .join(Property, Feedback.property_id == Property.id)
+        .where(Property.host_id == host_id)
+        .group_by(Property.host_id)
+    )
+    row = db.execute(stmt).first()
+    if row is not None:
+        _, host_name, count, avg_score, open_critical, sla_breached_count, escalated_count, avg_guest_rating = row
+        return HostPerformance(
+            host_id=host_id,
+            host_name=host_name,
+            feedback_count=count,
+            avg_sentiment_score=round(float(avg_score), 2) if avg_score is not None else 0.0,
+            open_critical_count=open_critical or 0,
+            sla_breached_count=sla_breached_count or 0,
+            escalated_count=escalated_count or 0,
+            avg_guest_rating=round(float(avg_guest_rating), 2) if avg_guest_rating is not None else None,
+            performance_score=_host_performance_score(
+                avg_sentiment_score=float(avg_score) if avg_score is not None else None,
+                open_critical=open_critical or 0,
+                sla_breached_count=sla_breached_count or 0,
+                escalated_count=escalated_count or 0,
+                avg_guest_rating=float(avg_guest_rating) if avg_guest_rating is not None else None,
+            ),
+        )
+
+    host_name = db.scalar(select(func.max(Property.host_name)).where(Property.host_id == host_id))
+    if host_name is None:
+        return None
+    return HostPerformance(
+        host_id=host_id,
+        host_name=host_name,
+        feedback_count=0,
+        avg_sentiment_score=0.0,
+        open_critical_count=0,
+        sla_breached_count=0,
+        escalated_count=0,
+        avg_guest_rating=None,
+        performance_score=0.0,
     )
 
 

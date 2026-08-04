@@ -18,12 +18,15 @@ def list_properties(
     limit: int = Query(100, ge=1, le=500),
     search: Optional[str] = Query(None, min_length=1, max_length=200),
     city: Optional[str] = Query(None, min_length=1, max_length=100),
+    host_id: Optional[int] = Query(None, ge=1),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[PropertyRead]:
     # Static reference data, open to any authenticated user - guests/hosts
-    # need this list to pick a property when submitting feedback.
-    properties = crud.list_properties(db, skip=skip, limit=limit, search=search, city=city)
+    # need this list to pick a property when submitting feedback. host_id
+    # discloses nothing new - host_name is already visible on every
+    # unfiltered row - it just lets a host ask for "my own".
+    properties = crud.list_properties(db, skip=skip, limit=limit, search=search, city=city, host_id=host_id)
     # average_rating isn't a Property column, so from_attributes can't pick
     # it up - computed from guest-submitted ratings only (never AI) and
     # filled in here, same pattern as FeedbackSubmitterRead.property_name.

@@ -398,6 +398,7 @@ def list_properties(
     limit: int = 100,
     search: str | None = None,
     city: str | None = None,
+    host_id: int | None = None,
 ) -> list[Property]:
     stmt = select(Property).order_by(Property.name)
     if search:
@@ -407,6 +408,8 @@ def list_properties(
         )
     if city:
         stmt = stmt.where(Property.city.ilike(f"%{city}%"))
+    if host_id is not None:
+        stmt = stmt.where(Property.host_id == host_id)
     stmt = stmt.offset(skip).limit(limit)
     return list(db.scalars(stmt))
 
