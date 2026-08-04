@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app.analytics.service import get_analytics_summary, get_notable_feedback, get_theme_frequencies
+from app.core.security import hash_password
 from app.database import crud
 from app.database.models import (
     FeedbackStatus,
@@ -8,18 +9,29 @@ from app.database.models import (
     Priority,
     Property,
     PropertyType,
+    Role,
     Sentiment,
     SubCategory,
 )
 
 
-def _seed_property(db_session, *, name="Sunny Loft", city="Austin", host_name="Jordan Lee") -> Property:
+def _seed_property(
+    db_session, *, name="Sunny Loft", city="Austin", host_name="Jordan Lee", host_id=None
+) -> Property:
     property_row = Property(
-        name=name, host_name=host_name, city=city, country="USA", property_type=PropertyType.ENTIRE_HOME
+        name=name, host_name=host_name, city=city, country="USA", property_type=PropertyType.ENTIRE_HOME,
+        host_id=host_id,
     )
     db_session.add(property_row)
     db_session.commit()
     return property_row
+
+
+def _seed_host_user(db_session, *, email) -> int:
+    user = crud.create_user(
+        db_session, email=email, hashed_password=hash_password("test-password-123"), role=Role.HOST
+    )
+    return user.id
 
 
 def _seed_classified(
@@ -99,6 +111,8 @@ def test_analytics_summary_empty_database_has_no_divide_by_zero(db_session):
     assert summary.avg_resolution_time_hours is None
     assert summary.safety_alerts_open_count == 0
     assert summary.feature_request_trend == []
+    assert summary.complaint_heatmap == []
+    assert summary.weekly_sentiment_trend == []
 
 
 def test_analytics_summary_since_filter_excludes_older_rows(db_session):
@@ -334,6 +348,44 @@ def test_property_health_penalizes_open_critical_safety_cases(db_session):
     assert summary.safety_alerts_open_count == 1
 
 
+def test_property_health_counts_open_maintenance_complaints(db_session):
+    property_row = _seed_property(db_session)
+    _seed_classified(
+        db_session, "leaky faucet", MainCategory.HOST_COMPLAINT, Sentiment.NEGATIVE, Priority.MEDIUM, 90, [],
+        sub_category=SubCategory.MAINTENANCE, property_id=property_row.id, status=FeedbackStatus.NEW,
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    matching = [p for p in summary.property_health if p.property_id == property_row.id]
+    assert matching
+    assert matching[0].open_maintenance_count == 1
+
+
+def test_property_health_counts_sla_breaches_and_averages_cleanliness_rating(db_session):
+    property_row = _seed_property(db_session)
+    guest_id = crud.create_user(
+        db_session, email="analytics-prop-guest@example.com", hashed_password=hash_password("test-password-123")
+    ).id
+    booking = crud.create_booking(
+        db_session, confirmation_code="ANALYTICS-PROP-001", guest_id=guest_id, property_id=property_row.id,
+        check_in_date=datetime.now(timezone.utc).date(), check_out_date=datetime.now(timezone.utc).date(),
+    )
+    feedback = crud.create_feedback(
+        db_session, raw_text="Stay review.", property_id=property_row.id, booking_id=booking.id,
+        overall_rating=4, cleanliness_rating=2,
+    )
+    feedback.sla_breached = True
+    db_session.commit()
+
+    summary = get_analytics_summary(db_session)
+
+    matching = [p for p in summary.property_health if p.property_id == property_row.id]
+    assert matching
+    assert matching[0].sla_breached_count == 1
+    assert matching[0].avg_cleanliness_rating == 2.0
+
+
 def test_safety_alerts_open_count_excludes_resolved_cases(db_session):
     property_row = _seed_property(db_session)
     _seed_classified(
@@ -355,7 +407,8 @@ def test_safety_alerts_open_count_excludes_resolved_cases(db_session):
 
 
 def test_host_performance_counts_feedback_and_open_critical_cases(db_session):
-    property_row = _seed_property(db_session, host_name="Jordan Lee")
+    host_id = _seed_host_user(db_session, email="jordan@example.com")
+    property_row = _seed_property(db_session, host_name="Jordan Lee", host_id=host_id)
     _seed_classified(
         db_session, "critical issue", MainCategory.HOST_COMPLAINT, Sentiment.NEGATIVE, Priority.CRITICAL, 90, [],
         sub_category=SubCategory.MAINTENANCE, property_id=property_row.id,
@@ -363,10 +416,77 @@ def test_host_performance_counts_feedback_and_open_critical_cases(db_session):
 
     summary = get_analytics_summary(db_session)
 
-    matching = [h for h in summary.host_performance if h.host_name == "Jordan Lee"]
+    matching = [h for h in summary.host_performance if h.host_id == host_id]
     assert len(matching) == 1
+    assert matching[0].host_name == "Jordan Lee"
     assert matching[0].feedback_count == 1
     assert matching[0].open_critical_count == 1
+
+
+def test_host_performance_excludes_properties_without_a_linked_host(db_session):
+    property_row = _seed_property(db_session, host_name="No Account Host", host_id=None)
+    _seed_classified(
+        db_session, "some issue", MainCategory.HOST_COMPLAINT, Sentiment.NEGATIVE, Priority.MEDIUM, 90, [],
+        property_id=property_row.id,
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    assert summary.host_performance == []
+
+
+def test_host_performance_does_not_merge_two_hosts_with_the_same_display_name(db_session):
+    host_a_id = _seed_host_user(db_session, email="host-a@example.com")
+    host_b_id = _seed_host_user(db_session, email="host-b@example.com")
+    property_a = _seed_property(db_session, name="Property A", host_name="Sam Rivera", host_id=host_a_id)
+    property_b = _seed_property(db_session, name="Property B", host_name="Sam Rivera", host_id=host_b_id)
+    _seed_classified(
+        db_session, "a", MainCategory.HOST_COMPLAINT, Sentiment.NEGATIVE, Priority.LOW, 90, [],
+        property_id=property_a.id,
+    )
+    _seed_classified(
+        db_session, "b1", MainCategory.HOST_COMPLAINT, Sentiment.NEGATIVE, Priority.LOW, 90, [],
+        property_id=property_b.id,
+    )
+    _seed_classified(
+        db_session, "b2", MainCategory.HOST_COMPLAINT, Sentiment.NEGATIVE, Priority.LOW, 90, [],
+        property_id=property_b.id,
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    by_id = {h.host_id: h for h in summary.host_performance}
+    assert len(by_id) == 2
+    assert by_id[host_a_id].feedback_count == 1
+    assert by_id[host_b_id].feedback_count == 2
+
+
+def test_host_performance_score_reflects_sla_escalation_and_rating_inputs(db_session):
+    host_id = _seed_host_user(db_session, email="scored-host@example.com")
+    property_row = _seed_property(db_session, host_id=host_id)
+    booking = crud.create_booking(
+        db_session, confirmation_code="ANALYTICS-HOST-001", guest_id=host_id, property_id=property_row.id,
+        check_in_date=datetime.now(timezone.utc).date(), check_out_date=datetime.now(timezone.utc).date(),
+    )
+    feedback = crud.create_feedback(
+        db_session, raw_text="Great stay.", property_id=property_row.id, booking_id=booking.id, overall_rating=5,
+    )
+    feedback.sentiment = Sentiment.POSITIVE
+    feedback.sla_breached = True
+    feedback.escalated = True
+    db_session.commit()
+
+    summary = get_analytics_summary(db_session)
+
+    matching = [h for h in summary.host_performance if h.host_id == host_id]
+    assert len(matching) == 1
+    host = matching[0]
+    assert host.sla_breached_count == 1
+    assert host.escalated_count == 1
+    assert host.avg_guest_rating == 5.0
+    # avg_sentiment_score=1.0 (all positive) -> 100; -5 (sla) -5 (escalated)
+    # + (5-3)*20=40 rating bonus = 130.0
+    assert host.performance_score == 130.0
 
 
 def test_feature_request_trend_only_counts_feature_request_subcategory(db_session):
@@ -383,3 +503,42 @@ def test_feature_request_trend_only_counts_feature_request_subcategory(db_sessio
 
     total_feature_requests = sum(point.count for point in summary.feature_request_trend)
     assert total_feature_requests == 1
+
+
+def test_complaint_heatmap_breaks_down_by_city_and_subcategory(db_session):
+    austin = _seed_property(db_session, name="Austin Loft", city="Austin")
+    denver = _seed_property(db_session, name="Denver Cabin", city="Denver")
+    _seed_classified(
+        db_session, "dirty", MainCategory.GUEST_REVIEW, Sentiment.NEGATIVE, Priority.HIGH, 90, [],
+        sub_category=SubCategory.CLEANLINESS, property_id=austin.id,
+    )
+    _seed_classified(
+        db_session, "broken lock", MainCategory.HOST_COMPLAINT, Sentiment.NEGATIVE, Priority.CRITICAL, 90, [],
+        sub_category=SubCategory.SAFETY, property_id=denver.id,
+    )
+
+    summary = get_analytics_summary(db_session)
+
+    cells = {(c.city, c.sub_category): c.count for c in summary.complaint_heatmap}
+    assert cells[("Austin", "Cleanliness")] == 1
+    assert cells[("Denver", "Safety")] == 1
+
+
+def test_weekly_sentiment_trend_breaks_out_by_sentiment(db_session):
+    positive = _seed_classified(
+        db_session, "great", MainCategory.GUEST_REVIEW, Sentiment.POSITIVE, Priority.LOW, 90, [],
+    )
+    negative = _seed_classified(
+        db_session, "bad", MainCategory.GUEST_REVIEW, Sentiment.NEGATIVE, Priority.HIGH, 90, [],
+    )
+    for row in (positive, negative):
+        row.created_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    summary = get_analytics_summary(db_session)
+
+    assert len(summary.weekly_sentiment_trend) == 1
+    point = summary.weekly_sentiment_trend[0]
+    assert point.positive == 1
+    assert point.negative == 1
+    assert point.neutral == 0

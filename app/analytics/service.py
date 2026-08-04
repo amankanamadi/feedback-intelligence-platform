@@ -10,12 +10,15 @@ from app.analytics.schemas import (
     CategoryCount,
     CityBreakdown,
     ConfidenceBucket,
+    HeatmapCell,
     HostPerformance,
     PropertyHealth,
     SentimentCount,
     ThemeFrequency,
+    WeeklySentimentPoint,
     WeeklyTrendPoint,
 )
+from app.database import crud
 from app.database.models import (
     Feedback,
     FeedbackStatus,
@@ -36,6 +39,14 @@ _CLOSED_STATUSES = (FeedbackStatus.RESOLVED, FeedbackStatus.CLOSED)
 
 
 def get_analytics_summary(db: Session, since: datetime | None = None) -> AnalyticsSummary:
+    # Every caller of /analytics and /reports/weekly is staff-only
+    # (RequireStaff), so there's no scoping concern like the one that
+    # limited where this gets called from in the feedback list routes -
+    # a single call here keeps sla_breached-derived metrics below from
+    # silently undercounting when nobody has hit a listing endpoint
+    # recently.
+    crud.flag_overdue_sla_breaches(db)
+
     total_stmt = select(func.count()).select_from(Feedback)
     sentiment_stmt = select(Feedback.sentiment, func.count()).where(Feedback.sentiment.is_not(None))
     category_stmt = select(Feedback.main_category, func.count()).where(
@@ -102,6 +113,26 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
         .group_by(Property.city)
     )
 
+    # city x sub_category grid for a chart-based heatmap - bounded to the
+    # same top-10 cities as most_affected_cities below (no second city
+    # query), sub_category (not main_category) since 3 values is too
+    # coarse and includes Guest Review, which isn't a complaint type.
+    heatmap_stmt = (
+        select(Property.city, Feedback.sub_category, func.count(Feedback.id))
+        .join(Property, Feedback.property_id == Property.id)
+        .where(Feedback.sub_category.is_not(None))
+        .group_by(Property.city, Feedback.sub_category)
+    )
+
+    # Sentiment break-out of the existing weekly_trend grouping, for a
+    # stacked/multi-line chart - weekly_trend itself stays total-count-only.
+    sentiment_week_stmt = (
+        select(week_expr, Feedback.sentiment, func.count())
+        .where(Feedback.sentiment.is_not(None))
+        .group_by(week_expr, Feedback.sentiment)
+        .order_by(week_expr)
+    )
+
     open_safety_case_expr = case(
         (
             and_(
@@ -113,6 +144,20 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
         ),
         else_=0,
     )
+    # Same shape as open_safety_case_expr, for Maintenance-type complaints -
+    # a real operational-drag signal, distinct from (and less severe than)
+    # an open critical safety case.
+    open_maintenance_case_expr = case(
+        (
+            and_(
+                Feedback.sub_category == SubCategory.MAINTENANCE,
+                Feedback.status.not_in(_CLOSED_STATUSES),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+    sla_breached_case_expr = case((Feedback.sla_breached.is_(True), 1), else_=0)
     property_stmt = (
         select(
             Property.id,
@@ -122,6 +167,9 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
             func.sum(case((Feedback.sentiment == Sentiment.POSITIVE, 1), else_=0)),
             func.sum(case((Feedback.sentiment == Sentiment.NEGATIVE, 1), else_=0)),
             func.sum(open_safety_case_expr),
+            func.sum(open_maintenance_case_expr),
+            func.sum(sla_breached_case_expr),
+            func.avg(Feedback.cleanliness_rating),
         )
         .join(Property, Feedback.property_id == Property.id)
         .group_by(Property.id, Property.name, Property.city)
@@ -139,15 +187,27 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
         ),
         else_=0,
     )
+    escalated_case_expr = case((Feedback.escalated.is_(True), 1), else_=0)
     host_stmt = (
         select(
-            Property.host_name,
+            Property.host_id,
+            func.max(Property.host_name),
             func.count(Feedback.id),
             func.avg(sentiment_score_expr),
             func.sum(open_critical_case_expr),
+            func.sum(sla_breached_case_expr),
+            func.sum(escalated_case_expr),
+            func.avg(Feedback.overall_rating),
         )
         .join(Property, Feedback.property_id == Property.id)
-        .group_by(Property.host_name)
+        # Property.host_id is the documented source of truth (see its
+        # model docstring) - host_name is only a display cache, so
+        # grouping by it instead let two hosts sharing a display name
+        # silently merge. func.max(...) aggregates the display text
+        # without adding it to GROUP BY (which could fragment one host's
+        # rows if that text ever drifted across their properties).
+        .where(Property.host_id.is_not(None))
+        .group_by(Property.host_id)
     )
 
     resolution_stmt = select(
@@ -173,6 +233,8 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
         resolution_stmt = resolution_stmt.where(Feedback.created_at >= since)
         safety_open_stmt = safety_open_stmt.where(Feedback.created_at >= since)
         feature_trend_stmt = feature_trend_stmt.where(Feedback.created_at >= since)
+        heatmap_stmt = heatmap_stmt.where(Feedback.created_at >= since)
+        sentiment_week_stmt = sentiment_week_stmt.where(Feedback.created_at >= since)
 
     guest_review_total = db.scalar(guest_review_total_stmt) or 0
     guest_review_positive = db.scalar(guest_review_positive_stmt) or 0
@@ -196,10 +258,31 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
             property_id=property_id,
             property_name=property_name,
             city=city,
-            health_score=round((positive - negative) / count * 100 - 10 * open_safety, 1),
+            health_score=round(
+                (positive - negative) / count * 100
+                - 10 * open_safety
+                - 5 * open_maintenance
+                - 3 * sla_breached_count
+                + (0.0 if avg_cleanliness is None else (float(avg_cleanliness) - 3) * 10),
+                1,
+            ),
             feedback_count=count,
+            open_maintenance_count=open_maintenance or 0,
+            sla_breached_count=sla_breached_count or 0,
+            avg_cleanliness_rating=round(float(avg_cleanliness), 2) if avg_cleanliness is not None else None,
         )
-        for property_id, property_name, city, count, positive, negative, open_safety in property_rows
+        for (
+            property_id,
+            property_name,
+            city,
+            count,
+            positive,
+            negative,
+            open_safety,
+            open_maintenance,
+            sla_breached_count,
+            avg_cleanliness,
+        ) in property_rows
         if count
     ]
     # Bottom 10 (needing attention) plus top 10 (best performing) by health
@@ -211,12 +294,33 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
     host_rows = db.execute(host_stmt).all()
     host_performance = [
         HostPerformance(
+            host_id=host_id,
             host_name=host_name,
             feedback_count=count,
             avg_sentiment_score=round(float(avg_score), 2) if avg_score is not None else 0.0,
             open_critical_count=open_critical or 0,
+            sla_breached_count=sla_breached_count or 0,
+            escalated_count=escalated_count or 0,
+            avg_guest_rating=round(float(avg_guest_rating), 2) if avg_guest_rating is not None else None,
+            performance_score=round(
+                (float(avg_score) if avg_score is not None else 0.0) * 100
+                - 10 * (open_critical or 0)
+                - 5 * (sla_breached_count or 0)
+                - 5 * (escalated_count or 0)
+                + (0.0 if avg_guest_rating is None else (float(avg_guest_rating) - 3) * 20),
+                1,
+            ),
         )
-        for host_name, count, avg_score, open_critical in host_rows
+        for (
+            host_id,
+            host_name,
+            count,
+            avg_score,
+            open_critical,
+            sla_breached_count,
+            escalated_count,
+            avg_guest_rating,
+        ) in host_rows
     ]
 
     avg_resolution_seconds = db.scalar(resolution_stmt)
@@ -229,6 +333,28 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
     feature_trend_rows = db.execute(feature_trend_stmt.group_by(week_expr).order_by(week_expr)).all()
     feature_request_trend = [
         WeeklyTrendPoint(week_start=week_start.date(), count=count) for week_start, count in feature_trend_rows
+    ]
+
+    top_cities = {c.city for c in most_affected_cities}
+    heatmap_rows = db.execute(heatmap_stmt).all()
+    complaint_heatmap = [
+        HeatmapCell(city=city, sub_category=sub_category.value, count=count)
+        for city, sub_category, count in heatmap_rows
+        if city in top_cities
+    ]
+
+    sentiment_week_rows = db.execute(sentiment_week_stmt).all()
+    sentiment_by_week: dict = {}
+    for week_start, sentiment_value, count in sentiment_week_rows:
+        sentiment_by_week.setdefault(week_start.date(), {})[sentiment_value] = count
+    weekly_sentiment_trend = [
+        WeeklySentimentPoint(
+            week_start=week,
+            positive=counts.get(Sentiment.POSITIVE, 0),
+            neutral=counts.get(Sentiment.NEUTRAL, 0),
+            negative=counts.get(Sentiment.NEGATIVE, 0),
+        )
+        for week, counts in sorted(sentiment_by_week.items())
     ]
 
     return AnalyticsSummary(
@@ -264,6 +390,8 @@ def get_analytics_summary(db: Session, since: datetime | None = None) -> Analyti
         avg_resolution_time_hours=avg_resolution_time_hours,
         safety_alerts_open_count=safety_alerts_open_count,
         feature_request_trend=feature_request_trend,
+        complaint_heatmap=complaint_heatmap,
+        weekly_sentiment_trend=weekly_sentiment_trend,
     )
 
 

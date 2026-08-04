@@ -35,3 +35,8 @@ class WeeklyNarrative(BaseModel):
     key_wins: list[str]
     key_concerns: list[str]
     recommended_actions: list[str]
+    # Risks visible in the trend data that haven't yet become a
+    # key_concern, plus a one-sentence projection of where the trend is
+    # headed next period if unaddressed.
+    emerging_risks: list[str]
+    forecast: str

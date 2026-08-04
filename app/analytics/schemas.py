@@ -39,13 +39,34 @@ class PropertyHealth(BaseModel):
     city: str
     health_score: float
     feedback_count: int
+    open_maintenance_count: int
+    sla_breached_count: int
+    avg_cleanliness_rating: Optional[float] = None
 
 
 class HostPerformance(BaseModel):
+    host_id: int
     host_name: str
     feedback_count: int
     avg_sentiment_score: float
     open_critical_count: int
+    sla_breached_count: int
+    escalated_count: int
+    avg_guest_rating: Optional[float] = None
+    performance_score: float
+
+
+class HeatmapCell(BaseModel):
+    city: str
+    sub_category: str
+    count: int
+
+
+class WeeklySentimentPoint(BaseModel):
+    week_start: date
+    positive: int
+    neutral: int
+    negative: int
 
 
 class AnalyticsSummary(BaseModel):
@@ -69,6 +90,8 @@ class AnalyticsSummary(BaseModel):
     avg_resolution_time_hours: Optional[float]
     safety_alerts_open_count: int
     feature_request_trend: list[WeeklyTrendPoint]
+    complaint_heatmap: list[HeatmapCell]
+    weekly_sentiment_trend: list[WeeklySentimentPoint]
 
 
 class ThemeFrequency(BaseModel):
@@ -102,3 +125,5 @@ class WeeklyReportResponse(BaseModel):
     key_wins: list[str]
     key_concerns: list[str]
     recommended_actions: list[str]
+    emerging_risks: list[str]
+    forecast: str

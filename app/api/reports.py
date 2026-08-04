@@ -32,7 +32,7 @@ def weekly_report(current_user: User = Depends(RequireStaff), db: Session = Depe
     )
 
     try:
-        narrative = generate_weekly_narrative(metrics, top_concerns, positive_highlights)
+        narrative = generate_weekly_narrative(metrics, top_concerns, positive_highlights, role=current_user.role)
     except Exception:
         logger.exception("Weekly narrative generation failed; returning metrics-only report")
         narrative = None
@@ -47,4 +47,6 @@ def weekly_report(current_user: User = Depends(RequireStaff), db: Session = Depe
         key_wins=narrative.key_wins if narrative else [],
         key_concerns=narrative.key_concerns if narrative else [],
         recommended_actions=narrative.recommended_actions if narrative else [],
+        emerging_risks=narrative.emerging_risks if narrative else [],
+        forecast=narrative.forecast if narrative else "Forecast unavailable.",
     )

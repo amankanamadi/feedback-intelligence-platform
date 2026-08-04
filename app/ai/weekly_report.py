@@ -4,11 +4,13 @@ from app.ai.prompt_builder import PROMPT_INJECTION_GUARD, build_messages
 from app.ai.schemas import WeeklyNarrative
 from app.ai.structured_output import get_structured_completion
 from app.analytics.schemas import AnalyticsSummary
-from app.database.models import Feedback
+from app.database.models import Feedback, Role
 
-SYSTEM_PROMPT = """You are an operations analyst producing a concise weekly operational
-summary of guest and host feedback for an Airbnb-style short-term rental platform's
-leadership team.
+# Shared across all 5 role framings below - only the final paragraph
+# (ROLE_FRAMING) changes what gets emphasized; the required output shape
+# and "ground truth, don't invent numbers" discipline stay identical.
+_SHARED_INSTRUCTIONS = """You are an operations analyst producing a concise weekly operational
+summary of guest and host feedback for an Airbnb-style short-term rental platform.
 
 You will be given, for the reporting period:
 - Aggregate metrics that have already been computed correctly - treat these as
@@ -19,19 +21,56 @@ You will be given, for the reporting period:
   reviews, host communication praise) from that period.
 
 Produce:
-- executive_summary: 2-4 sentences giving leadership the big picture (volume,
-  sentiment trend, most pressing category - e.g. a spike in cleanliness
-  complaints in a particular city, or a safety issue trend), in plain
-  business language.
+- executive_summary: 2-4 sentences giving the big picture (volume, sentiment
+  trend, most pressing category - e.g. a spike in cleanliness complaints in a
+  particular city, or a safety issue trend), in plain business language.
 - key_wins: 1-3 short bullet points on what is going well, grounded in the
   provided positive highlights.
 - key_concerns: 1-3 short bullet points on the most pressing issues, grounded in
   the provided top concerns.
-- recommended_actions: 1-3 short, concrete, actionable next steps an ops or
-  product leader could take this week.
+- recommended_actions: 1-3 short, concrete, actionable next steps to take this
+  week.
+- emerging_risks: 1-3 short bullet points on risks visible in the trend data
+  that haven't yet become a key_concern (e.g. a category climbing week over
+  week, a city trending more negative) - leave empty if nothing is emerging.
+- forecast: one sentence projecting where the trend is headed next period if
+  left unaddressed.
 
 Synthesize and prioritize; do not simply restate the raw data back verbatim.
-""" + PROMPT_INJECTION_GUARD
+"""
+
+# One short paragraph per staff role, appended to _SHARED_INSTRUCTIONS -
+# this is what makes each role's report a distinct framing over the same
+# underlying metrics, per the roadmap's "5 role-specific weekly reports."
+ROLE_FRAMING: dict[Role, str] = {
+    Role.OPS_MANAGER: (
+        "Frame this for an Operations Manager: emphasize escalation backlog, "
+        "SLA-breach queue health, and routing/staffing bottlenecks above all else."
+    ),
+    Role.SUPPORT_MANAGER: (
+        "Frame this for a Support Manager: emphasize ticket volume, resolution "
+        "time, and support-specific complaint patterns (booking, payments, "
+        "refunds, app issues) above all else."
+    ),
+    Role.TRUST_SAFETY: (
+        "Frame this for Trust & Safety: emphasize safety incidents and "
+        "critical-priority cases above all else - other categories are "
+        "secondary context, not the focus."
+    ),
+    Role.PRODUCT_MANAGER: (
+        "Frame this for a Product Manager: emphasize feature requests, app "
+        "issues, and product-shaped feedback above all else."
+    ),
+    Role.EXEC: (
+        "Frame this for an executive audience: emphasize overall business "
+        "health and guest satisfaction at a high level, and avoid operational "
+        "minutiae that isn't decision-relevant at the leadership level."
+    ),
+}
+
+ROLE_SYSTEM_PROMPTS: dict[Role, str] = {
+    role: _SHARED_INSTRUCTIONS + framing + PROMPT_INJECTION_GUARD for role, framing in ROLE_FRAMING.items()
+}
 
 
 def _format_metrics(metrics: AnalyticsSummary) -> str:
@@ -101,14 +140,28 @@ _EXAMPLE_OUTPUT = WeeklyNarrative(
         "Dispatch a locksmith to the affected property today and confirm the fix with Trust & Safety.",
         "Follow up with the housekeeping vendors tied to this week's cleanliness complaints.",
     ],
+    emerging_risks=[
+        "Cleanliness complaints have now appeared in back-to-back weeks - watch for a broader trend.",
+    ],
+    forecast=(
+        "If the housekeeping issue isn't addressed, expect cleanliness complaints to continue "
+        "next week at a similar or higher rate."
+    ),
 ).model_dump_json()
 
+# One shared example, not one per role: it demonstrates format and tone
+# (synthesize, don't restate raw numbers, ground claims in the given
+# excerpts) - role-agnostic concerns that the system prompt's framing
+# paragraph above already steers toward the right emphasis.
 FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [(_EXAMPLE_CONTEXT, _EXAMPLE_OUTPUT)]
 
 
 def generate_weekly_narrative(
-    metrics: AnalyticsSummary, top_concerns: list[Feedback], positive_highlights: list[Feedback]
+    metrics: AnalyticsSummary,
+    top_concerns: list[Feedback],
+    positive_highlights: list[Feedback],
+    role: Role,
 ) -> WeeklyNarrative:
     context = build_report_context(metrics, top_concerns, positive_highlights)
-    messages = build_messages(SYSTEM_PROMPT, context, FEW_SHOT_EXAMPLES)
+    messages = build_messages(ROLE_SYSTEM_PROMPTS[role], context, FEW_SHOT_EXAMPLES)
     return get_structured_completion(messages, WeeklyNarrative)

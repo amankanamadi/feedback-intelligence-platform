@@ -11,6 +11,8 @@ FIXED_NARRATIVE = WeeklyNarrative(
     key_wins=["Win one."],
     key_concerns=["Concern one."],
     recommended_actions=["Action one."],
+    emerging_risks=["Risk one."],
+    forecast="Stable outlook.",
 )
 
 
@@ -33,6 +35,8 @@ def test_weekly_report_empty_db(admin_client, mock_narrative):
     assert body["positive_highlights"] == []
     assert body["executive_summary"] == "Test summary."
     assert body["key_wins"] == ["Win one."]
+    assert body["emerging_risks"] == ["Risk one."]
+    assert body["forecast"] == "Stable outlook."
 
 
 def test_weekly_report_reflects_seeded_data(admin_client, db_session, mock_narrative):
@@ -84,3 +88,26 @@ def test_weekly_report_degrades_gracefully_when_narrative_fails(admin_client, mo
     body = response.json()
     assert body["executive_summary"] == "Executive summary unavailable."
     assert body["key_wins"] == []
+    assert body["emerging_risks"] == []
+    assert body["forecast"] == "Forecast unavailable."
+
+
+@pytest.mark.parametrize(
+    "client_fixture,expected_role",
+    [
+        ("admin_client", "SUPPORT_MANAGER"),
+        ("ops_manager_client", "OPS_MANAGER"),
+        ("product_manager_client", "PRODUCT_MANAGER"),
+        ("exec_client", "EXEC"),
+        ("trust_safety_client", "TRUST_SAFETY"),
+    ],
+)
+def test_weekly_report_passes_the_callers_own_role(client_fixture, expected_role, mock_narrative, request):
+    from app.database.models import Role
+
+    staff_client = request.getfixturevalue(client_fixture)
+
+    response = staff_client.get("/reports/weekly")
+
+    assert response.status_code == 200
+    assert mock_narrative.call_args.kwargs["role"] == Role[expected_role]

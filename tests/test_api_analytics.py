@@ -33,6 +33,8 @@ def test_analytics_endpoint_returns_expected_shape_on_empty_db(admin_client):
     assert body["avg_resolution_time_hours"] is None
     assert body["safety_alerts_open_count"] == 0
     assert body["feature_request_trend"] == []
+    assert body["complaint_heatmap"] == []
+    assert body["weekly_sentiment_trend"] == []
 
 
 def test_analytics_endpoint_reflects_seeded_data(admin_client, db_session):
