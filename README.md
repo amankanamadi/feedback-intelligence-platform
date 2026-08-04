@@ -49,17 +49,18 @@ it's a separate app on its own origin, not served by this backend.
 
 ### Roles
 
-Six roles, in two tiers:
+Seven roles, in two tiers:
 
 - **Guest** / **Host** — the submitter tier. Chosen at signup
   (`POST /auth/register` accepts `role: "GUEST" | "HOST"` and rejects
   anything else). Scoped to their own feedback only.
 - **Customer Support Manager** / **Operations Manager** / **Product
-  Manager** / **Executive Leadership** — the staff tier. All four can view
-  every feedback item, analytics, and the weekly report. Only Support
-  Manager and Ops Manager can edit a case (status/priority/tags/notes/
-  response), bulk-upload, or export — Product Manager and Exec Leadership
-  are view-only.
+  Manager** / **Trust & Safety** / **Executive Leadership** — the staff
+  tier. All five can view every feedback item, analytics, and the weekly
+  report. Support Manager and Ops Manager can edit any case (status/
+  priority/tags/notes/response), bulk-upload, or export. Trust & Safety
+  can edit only the Safety-routed cases in their own bypass queue. Product
+  Manager and Exec Leadership are view-only.
 
 Staff accounts are never self-registered — promote one directly in the
 database:
@@ -70,25 +71,32 @@ docker exec -it feedback-intelligence-platform-db-1 psql -U feedback_app -d feed
 ```
 
 (Valid staff roles: `SUPPORT_MANAGER`, `OPS_MANAGER`, `PRODUCT_MANAGER`,
-`EXEC`. Adjust the container name if it differs - check with
-`docker compose ps`. Log out and back in afterward so a fresh JWT picks
-up the new role.)
+`TRUST_SAFETY`, `EXEC`. Adjust the container name if it differs - check
+with `docker compose ps`. Log out and back in afterward so a fresh JWT
+picks up the new role.)
 
 ### Demo data
 
-`scripts/seed_synthetic_feedback.py` seeds ~24 properties across a dozen
-cities, provisions one demo account per role, and submits ~150 synthetic
-guest/host feedback items through the real classification pipeline:
+`scripts/seed_demo_data.py` seeds a full demo environment: 5 staff
+accounts (one per staff role), 25 guest and 10 host accounts, ~50
+properties distributed 3-8 per host across 18 cities, 100+ bookings, and
+a couple hundred stay reviews/host complaints/support tickets submitted
+through the real classification pipeline (embedding, RAG retrieval,
+classification, routing, SLA), plus a sample of staff responses, guest
+accept/reject decisions, and wishlist entries:
 
 ```bash
-python scripts/generate_synthetic_feedback.py --per-topic 13   # writes scripts/synthetic_dataset.json
-python scripts/seed_synthetic_feedback.py                      # seeds properties + demo accounts + feedback
+python scripts/generate_synthetic_feedback.py --per-topic 13   # writes scripts/synthetic_dataset.json (only needed once)
+python scripts/seed_demo_data.py                                # seeds accounts + properties + bookings + feedback
 ```
 
-Both hit the real OpenAI API (text generation, embeddings, and
-classification), so this costs real API calls and takes a few minutes.
-The seed script prints all 6 demo logins (same password,
-`Demo12345!` by default) at the end.
+The first command hits the real OpenAI API to write synthetic text; the
+second reuses that text but still hits OpenAI for every embedding and
+classification call, so it also costs real API calls and takes a while
+(a couple hundred feedback items, not a handful). Each phase (accounts,
+properties, bookings, feedback) skips itself if that data already exists,
+so re-running after an interruption is safe. The script prints every demo
+login (same password, `Demo12345!` by default) at the end.
 
 ### Option B: Fully containerized (backend + frontend + migrations, one command)
 
