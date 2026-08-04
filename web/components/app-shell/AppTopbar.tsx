@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/app-shell/NotificationBell";
 import { useAuth } from "@/lib/auth";
 import { useLogoutMutation } from "@/hooks/use-logout";
 import { ROLE_LABELS } from "@/types/auth";
@@ -31,6 +32,7 @@ export function AppTopbar({ onMenuClick }: { onMenuClick: () => void }) {
         </Button>
       </div>
       <div className="flex items-center gap-3">
+        <NotificationBell />
         {user && (
           <div className="text-right">
             <p className="text-sm font-medium text-foreground">{user.full_name ?? user.email}</p>

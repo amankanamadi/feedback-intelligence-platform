@@ -151,6 +151,13 @@ export type FeedbackCreatePayload = {
   device?: string;
   browser?: string;
   platform?: string;
+  booking_id?: number;
+  overall_rating?: number;
+  cleanliness_rating?: number;
+  communication_rating?: number;
+  checkin_rating?: number;
+  location_rating?: number;
+  value_rating?: number;
 };
 
 export type FeedbackAdminUpdatePayload = {
