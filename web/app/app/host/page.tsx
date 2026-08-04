@@ -13,7 +13,7 @@ import { RespondDialog } from "@/components/host/RespondDialog";
 import { useHostProperties } from "@/hooks/use-host-properties";
 import { useHostPerformance } from "@/hooks/use-host-performance";
 import { useHostQueue } from "@/hooks/use-host-queue";
-import { Home } from "lucide-react";
+import { Home, Inbox } from "lucide-react";
 
 export default function HostDashboardPage() {
   const propertiesQuery = useHostProperties();
@@ -74,7 +74,13 @@ export default function HostDashboardPage() {
           query={propertiesQuery}
           skeleton={<ListSkeleton rows={2} />}
           empty={(data) => data.length === 0}
-          emptyState={<p className="text-sm text-muted-foreground">No properties assigned yet.</p>}
+          emptyState={
+            <EmptyState
+              icon={<Home className="size-10" aria-hidden="true" />}
+              title="No properties assigned yet"
+              description="Properties assigned to you will appear here as cards."
+            />
+          }
         >
           {(properties) => (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -92,7 +98,13 @@ export default function HostDashboardPage() {
           query={queueQuery}
           skeleton={<TableSkeleton rows={4} />}
           empty={(data) => data.length === 0}
-          emptyState={<p className="text-sm text-muted-foreground">Nothing routed to you right now.</p>}
+          emptyState={
+            <EmptyState
+              icon={<Inbox className="size-10" aria-hidden="true" />}
+              title="Nothing routed to you right now"
+              description="Complaints assigned to your properties will show up here."
+            />
+          }
         >
           {(items) => (
             <Table>

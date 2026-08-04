@@ -1,3 +1,6 @@
+import { Building2 } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { PropertyHealth } from "@/types/analytics";
 
 // Two dimensions worth comparing at once (score + volume) reads more
@@ -7,43 +10,43 @@ import type { PropertyHealth } from "@/types/analytics";
 // this.
 export function PropertyHealthTable({ data }: { data: PropertyHealth[] }) {
   if (data.length === 0) {
-    return <p className="text-sm text-muted-foreground">No property data yet.</p>;
+    return (
+      <EmptyState
+        icon={<Building2 className="size-10" aria-hidden="true" />}
+        title="No property data yet"
+        description="Health scores will show up here once properties have feedback."
+      />
+    );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-          <tr>
-            <th className="px-2 py-2">Property</th>
-            <th className="px-2 py-2">City</th>
-            <th className="px-2 py-2">Health score</th>
-            <th className="px-2 py-2">Feedback</th>
-            <th className="px-2 py-2">Open maintenance</th>
-            <th className="px-2 py-2">SLA breached</th>
-            <th className="px-2 py-2">Avg. cleanliness</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {data.map((row) => (
-            <tr key={row.property_id}>
-              <td className="px-2 py-2 text-foreground">{row.property_name}</td>
-              <td className="px-2 py-2 text-muted-foreground">{row.city}</td>
-              <td
-                className={
-                  row.health_score >= 0 ? "px-2 py-2 font-medium text-success" : "px-2 py-2 font-medium text-destructive"
-                }
-              >
-                {row.health_score}
-              </td>
-              <td className="px-2 py-2 text-muted-foreground">{row.feedback_count}</td>
-              <td className="px-2 py-2 text-muted-foreground">{row.open_maintenance_count}</td>
-              <td className="px-2 py-2 text-muted-foreground">{row.sla_breached_count}</td>
-              <td className="px-2 py-2 text-muted-foreground">{row.avg_cleanliness_rating ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Property</TableHead>
+          <TableHead>City</TableHead>
+          <TableHead>Health score</TableHead>
+          <TableHead>Feedback</TableHead>
+          <TableHead>Open maintenance</TableHead>
+          <TableHead>SLA breached</TableHead>
+          <TableHead>Avg. cleanliness</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((row) => (
+          <TableRow key={row.property_id}>
+            <TableCell className="text-foreground">{row.property_name}</TableCell>
+            <TableCell className="text-muted-foreground">{row.city}</TableCell>
+            <TableCell className={row.health_score >= 0 ? "font-medium text-success" : "font-medium text-destructive"}>
+              {row.health_score}
+            </TableCell>
+            <TableCell className="text-muted-foreground">{row.feedback_count}</TableCell>
+            <TableCell className="text-muted-foreground">{row.open_maintenance_count}</TableCell>
+            <TableCell className="text-muted-foreground">{row.sla_breached_count}</TableCell>
+            <TableCell className="text-muted-foreground">{row.avg_cleanliness_rating ?? "—"}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

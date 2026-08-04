@@ -14,6 +14,7 @@ import { KpiCards } from "@/components/admin/KpiCards";
 import { PropertyHealthTable } from "@/components/admin/PropertyHealthTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataState } from "@/components/shared/DataState";
+import { TableSkeleton } from "@/components/shared/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { useThemes } from "@/hooks/use-themes";
@@ -92,7 +93,7 @@ export default function AnalyticsPage() {
           <CardTitle className="text-base">Complaint heatmap</CardTitle>
         </CardHeader>
         <CardContent>
-          <DataState query={analyticsQuery} skeleton={<Skeleton className="h-48 w-full" />}>
+          <DataState query={analyticsQuery} skeleton={<TableSkeleton rows={4} />}>
             {(analytics) => <ComplaintHeatmapGrid data={analytics.complaint_heatmap} />}
           </DataState>
         </CardContent>
@@ -104,7 +105,7 @@ export default function AnalyticsPage() {
             <CardTitle className="text-base">Property health</CardTitle>
           </CardHeader>
           <CardContent>
-            <DataState query={analyticsQuery} skeleton={<Skeleton className="h-48 w-full" />}>
+            <DataState query={analyticsQuery} skeleton={<TableSkeleton rows={4} />}>
               {(analytics) => <PropertyHealthTable data={analytics.property_health} />}
             </DataState>
           </CardContent>
@@ -114,7 +115,7 @@ export default function AnalyticsPage() {
             <CardTitle className="text-base">Host performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <DataState query={analyticsQuery} skeleton={<Skeleton className="h-48 w-full" />}>
+            <DataState query={analyticsQuery} skeleton={<TableSkeleton rows={4} />}>
               {(analytics) => <HostPerformanceTable data={analytics.host_performance} />}
             </DataState>
           </CardContent>

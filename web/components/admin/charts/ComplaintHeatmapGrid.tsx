@@ -1,3 +1,6 @@
+import { Map as MapIcon } from "lucide-react";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CONFIDENCE_SEQUENTIAL } from "@/lib/chart-colors";
 import type { HeatmapCell } from "@/types/analytics";
 
@@ -8,7 +11,13 @@ import type { HeatmapCell } from "@/types/analytics";
 // same "where are the hot spots" read without a new dependency.
 export function ComplaintHeatmapGrid({ data }: { data: HeatmapCell[] }) {
   if (data.length === 0) {
-    return <p className="text-sm text-muted-foreground">No complaint data yet.</p>;
+    return (
+      <EmptyState
+        icon={<MapIcon className="size-10" aria-hidden="true" />}
+        title="No complaint data yet"
+        description="The heatmap fills in once complaints span multiple cities and categories."
+      />
+    );
   }
 
   const cities = Array.from(new Set(data.map((cell) => cell.city))).sort();
@@ -24,39 +33,37 @@ export function ComplaintHeatmapGrid({ data }: { data: HeatmapCell[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-xs">
-        <thead>
-          <tr>
-            <th className="px-2 py-1 text-left text-muted-foreground">City</th>
-            {subCategories.map((sub) => (
-              <th key={sub} className="px-2 py-1 text-center text-muted-foreground">
-                {sub}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {cities.map((city) => (
-            <tr key={city}>
-              <td className="px-2 py-1 font-medium text-foreground">{city}</td>
-              {subCategories.map((sub) => {
-                const count = byKey.get(`${city}|${sub}`) ?? 0;
-                return (
-                  <td
-                    key={sub}
-                    className="px-2 py-1 text-center"
-                    style={{ backgroundColor: colorFor(count), color: count > 0 ? "#ffffff" : undefined }}
-                    title={`${city} / ${sub}: ${count}`}
-                  >
-                    {count > 0 ? count : ""}
-                  </td>
-                );
-              })}
-            </tr>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>City</TableHead>
+          {subCategories.map((sub) => (
+            <TableHead key={sub} className="text-center">
+              {sub}
+            </TableHead>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {cities.map((city) => (
+          <TableRow key={city}>
+            <TableCell className="font-medium text-foreground">{city}</TableCell>
+            {subCategories.map((sub) => {
+              const count = byKey.get(`${city}|${sub}`) ?? 0;
+              return (
+                <TableCell
+                  key={sub}
+                  className="text-center"
+                  style={{ backgroundColor: colorFor(count), color: count > 0 ? "#ffffff" : undefined }}
+                  title={`${city} / ${sub}: ${count}`}
+                >
+                  {count > 0 ? count : ""}
+                </TableCell>
+              );
+            })}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
