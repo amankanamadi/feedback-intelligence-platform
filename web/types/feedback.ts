@@ -37,6 +37,15 @@ export type GuestDecisionValue = "Pending" | "Accepted" | "Rejected";
 
 export const STATUS_OPTIONS: FeedbackStatus[] = ["New", "Acknowledged", "In Review", "In Progress", "Resolved", "Closed"];
 export const PRIORITY_OPTIONS: Priority[] = ["Low", "Medium", "High", "Critical"];
+export const RESPONSIBLE_TEAM_OPTIONS: ResponsibleTeam[] = [
+  "Host",
+  "Customer Support",
+  "Payments",
+  "Finance",
+  "Trust & Safety",
+  "Engineering",
+  "Product",
+];
 export const MAIN_CATEGORY_OPTIONS: MainCategory[] = ["Guest Review", "Host Complaint", "Support Ticket"];
 export const SENTIMENT_OPTIONS: Sentiment[] = ["Positive", "Neutral", "Negative"];
 

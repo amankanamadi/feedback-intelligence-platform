@@ -11,6 +11,7 @@ import {
   Inbox,
   MessageSquarePlus,
   Settings,
+  ShieldAlert,
   Sliders,
   Tags,
   User,
@@ -18,7 +19,9 @@ import {
 } from "lucide-react";
 import { useIsGuest } from "@/hooks/use-is-guest";
 import { useIsHost } from "@/hooks/use-is-host";
+import { useIsManager } from "@/hooks/use-is-manager";
 import { useIsStaff } from "@/hooks/use-is-staff";
+import { useIsTrustSafety } from "@/hooks/use-is-trust-safety";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -32,6 +35,8 @@ type NavGroup = {
   staffOnly?: boolean;
   hostOnly?: boolean;
   guestOnly?: boolean;
+  manageOnly?: boolean;
+  trustSafetyOnly?: boolean;
   items: NavItem[];
 };
 
@@ -65,6 +70,16 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Operations Queue",
+    manageOnly: true,
+    items: [{ href: "/app/operations", label: "Operations Queue", icon: Inbox }],
+  },
+  {
+    label: "Trust & Safety",
+    trustSafetyOnly: true,
+    items: [{ href: "/app/trust-safety", label: "Trust & Safety Queue", icon: ShieldAlert }],
+  },
+  {
     label: "Operations",
     staffOnly: true,
     items: [
@@ -92,12 +107,19 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const isStaff = useIsStaff();
   const isHost = useIsHost();
   const isGuest = useIsGuest();
+  const isManager = useIsManager();
+  const isTrustSafety = useIsTrustSafety();
   const activeHref = findActiveHref(pathname);
 
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 pb-6">
       {NAV_GROUPS.filter(
-        (group) => (!group.staffOnly || isStaff) && (!group.hostOnly || isHost) && (!group.guestOnly || isGuest)
+        (group) =>
+          (!group.staffOnly || isStaff) &&
+          (!group.hostOnly || isHost) &&
+          (!group.guestOnly || isGuest) &&
+          (!group.manageOnly || isManager) &&
+          (!group.trustSafetyOnly || isTrustSafety)
       ).map((group, index) => (
         <div key={group.label ?? index} className="flex flex-col gap-1">
           {group.label && (

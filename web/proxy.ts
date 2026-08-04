@@ -16,6 +16,7 @@ type Role = "GUEST" | "HOST" | "SUPPORT_MANAGER" | "OPS_MANAGER" | "PRODUCT_MANA
 type Me = { role: Role } | null;
 
 const STAFF_ROLES = new Set<Role>(["SUPPORT_MANAGER", "OPS_MANAGER", "PRODUCT_MANAGER", "TRUST_SAFETY", "EXEC"]);
+const MANAGE_ROLES = new Set<Role>(["SUPPORT_MANAGER", "OPS_MANAGER"]);
 
 // Both login entry points ("Login to Give Feedback" and "Operations Login")
 // land here regardless of role - one app, not two portals.
@@ -48,6 +49,16 @@ const HOST_ONLY_SEGMENTS = ["/app/host"];
 // deliberately NOT in any of these arrays - browsing listings is open to
 // every role, matching GET /properties's own design.
 const GUEST_ONLY_SEGMENTS = ["/app/wishlist"];
+
+// Operations Queue is for MANAGE_ROLES specifically (Support/Ops
+// Manager) - Product Manager/Exec/Trust & Safety already fall out via
+// STAFF_ONLY_SEGMENTS not applying to this narrower check.
+const MANAGE_ONLY_SEGMENTS = ["/app/operations"];
+
+// Trust & Safety's own dedicated bypass queue - not visible even to
+// other staff roles via this page (they can still see the same items
+// through GET /feedback?responsible_team=... if they need to).
+const TRUST_SAFETY_ONLY_SEGMENTS = ["/app/trust-safety"];
 
 async function fetchMe(cookieHeader: string | null): Promise<Me> {
   if (!cookieHeader) return null;
@@ -94,6 +105,15 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL(APP_HOME, request.url));
     }
     if (GUEST_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && me.role !== "GUEST") {
+      return NextResponse.redirect(new URL(APP_HOME, request.url));
+    }
+    if (MANAGE_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && !MANAGE_ROLES.has(me.role)) {
+      return NextResponse.redirect(new URL(APP_HOME, request.url));
+    }
+    if (
+      TRUST_SAFETY_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) &&
+      me.role !== "TRUST_SAFETY"
+    ) {
       return NextResponse.redirect(new URL(APP_HOME, request.url));
     }
   }

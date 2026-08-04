@@ -9,15 +9,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PriorityBadge, SentimentBadge, StatusBadge } from "@/components/shared/StatusBadge";
+import { ComplaintTimeline } from "@/components/operations/ComplaintTimeline";
 import { useUpdateFeedbackMutation } from "@/hooks/use-update-feedback";
 import { API_BASE_URL } from "@/lib/api-client";
 import { isApiError } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
-import { PRIORITY_OPTIONS, STATUS_OPTIONS, type FeedbackAdmin, type FeedbackStatus, type Priority } from "@/types/feedback";
+import {
+  MAIN_CATEGORY_OPTIONS,
+  PRIORITY_OPTIONS,
+  RESPONSIBLE_TEAM_OPTIONS,
+  STATUS_OPTIONS,
+  type FeedbackAdmin,
+  type FeedbackStatus,
+  type MainCategory,
+  type Priority,
+  type ResponsibleTeam,
+} from "@/types/feedback";
 
 type EditFormValues = {
   status: FeedbackStatus;
   priority: Priority | "";
+  main_category: MainCategory | "";
+  responsible_team: ResponsibleTeam | "";
   tags: string;
   internal_notes: string;
   admin_response: string;
@@ -30,6 +43,8 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
     defaultValues: {
       status: feedback.status,
       priority: feedback.priority ?? "",
+      main_category: feedback.main_category ?? "",
+      responsible_team: feedback.responsible_team ?? "",
       tags: feedback.tags.join(", "),
       internal_notes: feedback.internal_notes ?? "",
       admin_response: feedback.admin_response ?? "",
@@ -42,6 +57,8 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
     reset({
       status: feedback.status,
       priority: feedback.priority ?? "",
+      main_category: feedback.main_category ?? "",
+      responsible_team: feedback.responsible_team ?? "",
       tags: feedback.tags.join(", "),
       internal_notes: feedback.internal_notes ?? "",
       admin_response: feedback.admin_response ?? "",
@@ -53,6 +70,8 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
       {
         status: values.status,
         priority: values.priority || undefined,
+        main_category: values.main_category || undefined,
+        responsible_team: values.responsible_team || undefined,
         tags: values.tags
           .split(",")
           .map((tag) => tag.trim())
@@ -156,6 +175,65 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
           </CardContent>
         </Card>
 
+        {(feedback.root_cause || feedback.business_impact || feedback.executive_summary || feedback.preventive_recommendation) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Case analysis</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {feedback.responsible_team && <Badge variant="default">{feedback.responsible_team}</Badge>}
+                {feedback.escalated && <Badge variant="destructive">Escalated</Badge>}
+                {feedback.sla_breached && <Badge variant="destructive">SLA Breached</Badge>}
+                {feedback.sla_due_at && !feedback.sla_breached && (
+                  <Badge variant="muted">SLA due {formatDateTime(feedback.sla_due_at)}</Badge>
+                )}
+                {feedback.guest_decision && (
+                  <Badge variant={feedback.guest_decision === "Accepted" ? "success" : "destructive"}>
+                    Guest {feedback.guest_decision.toLowerCase()}
+                  </Badge>
+                )}
+                {feedback.duplicate_of_feedback_id && (
+                  <Badge variant="muted">Duplicate of #{feedback.duplicate_of_feedback_id}</Badge>
+                )}
+              </div>
+              {feedback.root_cause && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Root cause</p>
+                  <p className="text-foreground">{feedback.root_cause}</p>
+                </div>
+              )}
+              {feedback.business_impact && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Business impact</p>
+                  <p className="text-foreground">{feedback.business_impact}</p>
+                </div>
+              )}
+              {feedback.executive_summary && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Executive summary</p>
+                  <p className="text-foreground">{feedback.executive_summary}</p>
+                </div>
+              )}
+              {feedback.preventive_recommendation && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Preventive recommendation</p>
+                  <p className="text-foreground">{feedback.preventive_recommendation}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ComplaintTimeline feedback={feedback} />
+          </CardContent>
+        </Card>
+
         {feedback.attachments.length > 0 && (
           <Card>
             <CardHeader>
@@ -221,6 +299,39 @@ export function FeedbackDetailAdmin({ feedback }: { feedback: FeedbackAdmin }) {
                     <PriorityBadge priority={feedback.priority} />
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="main_category">Category (override)</Label>
+                <select
+                  id="main_category"
+                  {...register("main_category")}
+                  className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+                >
+                  <option value="">Unset</option>
+                  {MAIN_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="responsible_team">Responsible team (reassign)</Label>
+                <select
+                  id="responsible_team"
+                  {...register("responsible_team")}
+                  className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+                >
+                  <option value="">Unset</option>
+                  {RESPONSIBLE_TEAM_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
