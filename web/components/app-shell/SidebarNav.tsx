@@ -37,6 +37,7 @@ type NavGroup = {
   guestOnly?: boolean;
   manageOnly?: boolean;
   trustSafetyOnly?: boolean;
+  hiddenFromStaff?: boolean;
   items: NavItem[];
 };
 
@@ -44,8 +45,15 @@ type NavGroup = {
 // Guest/Host, rather than living in a separate portal/route tree.
 const NAV_GROUPS: NavGroup[] = [
   {
+    // Submitting feedback is a Guest/Host action - staff work cases, they
+    // don't file them as if they were the submitter, so this is its own
+    // group (hiddenFromStaff) rather than living in the ungated group
+    // below alongside Feedback/Properties/Profile, which staff do need.
+    hiddenFromStaff: true,
+    items: [{ href: "/app/feedback/new", label: "Submit Feedback", icon: MessageSquarePlus }],
+  },
+  {
     items: [
-      { href: "/app/feedback/new", label: "Submit Feedback", icon: MessageSquarePlus },
       { href: "/app/feedback", label: "Feedback", icon: Inbox },
       { href: "/app/properties", label: "Properties", icon: Building2 },
       { href: "/app/profile", label: "Profile", icon: User },
@@ -119,7 +127,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           (!group.hostOnly || isHost) &&
           (!group.guestOnly || isGuest) &&
           (!group.manageOnly || isManager) &&
-          (!group.trustSafetyOnly || isTrustSafety)
+          (!group.trustSafetyOnly || isTrustSafety) &&
+          (!group.hiddenFromStaff || !isStaff)
       ).map((group, index) => (
         <div key={group.label ?? index} className="flex flex-col gap-1">
           {group.label && (

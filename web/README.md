@@ -40,12 +40,12 @@ resolve - so there are two separate base-URL variables:
 Both are wired up already in the root `docker-compose.yml`'s `web`
 service - only relevant if you're changing how that's configured.
 
-## One app, role-adaptive - not two portals
+## One app, role-adaptive - not three portals
 
-There are two distinct login entry points ("Guest & Host Sign In" and
-"Operations Sign In" - different copy/branding, both call the same
-`POST /auth/login`), but everyone lands in the **same** app at `/app/*`
-afterward. Role only controls which nav items and pages are visible/
+There are three distinct login entry points ("Guest Sign In",
+"Host Sign In", and "Operations Sign In" - different copy/branding, all
+call the same `POST /auth/login`), but everyone lands in the **same**
+app at `/app/*` afterward. Role only controls which nav items and pages are visible/
 reachable (see `components/app-shell/SidebarNav.tsx`'s `staffOnly`/
 `hostOnly`/`guestOnly`/`manageOnly`/`trustSafetyOnly` group flags) -
 there's no separate route tree or visual theme per role.

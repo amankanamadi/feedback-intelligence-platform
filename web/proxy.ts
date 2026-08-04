@@ -24,7 +24,7 @@ const APP_HOME = "/app";
 
 // Pages a logged-in visitor shouldn't see again - hitting one redirects
 // them straight into the app instead.
-const AUTH_ENTRY_PAGES = new Set(["/login", "/admin-login", "/signup"]);
+const AUTH_ENTRY_PAGES = new Set(["/login", "/host-login", "/admin-login", "/signup"]);
 
 // Sub-paths under /app that only render/apply for staff (Support Manager,
 // Ops Manager, Product Manager, Exec Leadership) - a Guest/Host hitting
@@ -59,6 +59,11 @@ const MANAGE_ONLY_SEGMENTS = ["/app/operations"];
 // other staff roles via this page (they can still see the same items
 // through GET /feedback?responsible_team=... if they need to).
 const TRUST_SAFETY_ONLY_SEGMENTS = ["/app/trust-safety"];
+
+// Submitting feedback is a Guest/Host action - staff work cases, they
+// don't file them as if they were the submitter. Mirrors the sidebar's
+// own hiddenFromStaff nav group.
+const STAFF_BLOCKED_SEGMENTS = ["/app/feedback/new"];
 
 async function fetchMe(cookieHeader: string | null): Promise<Me> {
   if (!cookieHeader) return null;
@@ -116,6 +121,9 @@ export async function proxy(request: NextRequest) {
     ) {
       return NextResponse.redirect(new URL(APP_HOME, request.url));
     }
+    if (STAFF_BLOCKED_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && STAFF_ROLES.has(me.role)) {
+      return NextResponse.redirect(new URL(APP_HOME, request.url));
+    }
   }
 
   return NextResponse.next();
@@ -128,5 +136,5 @@ function redirectToLogin(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/admin-login", "/signup", "/app/:path*"],
+  matcher: ["/", "/login", "/host-login", "/admin-login", "/signup", "/app/:path*"],
 };

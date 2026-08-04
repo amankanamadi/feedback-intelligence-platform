@@ -318,13 +318,22 @@ def list_feedback(
 
 
 def list_feedback_for_host(
-    db: Session, host_id: int, *, skip: int = 0, limit: int = 100, status: FeedbackStatus | None = None
+    db: Session,
+    host_id: int,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+    status: FeedbackStatus | None = None,
+    unresolved: bool | None = None,
 ) -> list[Feedback]:
     """A host's actionable complaint queue - only items actually routed
     to them (Maintenance-type complaints on their own properties), never
     every review/complaint about their listings. Safety items are routed
     to Trust & Safety and never appear here - that's the bypass, from the
-    host's side.
+    host's side. `unresolved=True` clears a case out of the active queue
+    once it's Resolved/Closed - same semantics as list_feedback's own
+    `unresolved` filter - while the host can still pull up everything
+    (including past resolved cases) by omitting it.
     """
     stmt = (
         select(Feedback)
@@ -335,6 +344,8 @@ def list_feedback_for_host(
     )
     if status is not None:
         stmt = stmt.where(Feedback.status == status)
+    if unresolved:
+        stmt = stmt.where(Feedback.status.not_in([FeedbackStatus.RESOLVED, FeedbackStatus.CLOSED]))
     stmt = stmt.offset(skip).limit(limit)
     return list(db.scalars(stmt))
 

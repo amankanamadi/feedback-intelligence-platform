@@ -22,9 +22,9 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-// Both "Guest & Host Sign In" and "Operations Sign In" land here regardless
-// of role - one app, not two portals. Role only controls which nav items
-// and pages are reachable once inside.
+// "Guest Sign In", "Host Sign In", and "Operations Sign In" all land here
+// regardless of role - one app, not three portals. Role only controls
+// which nav items and pages are reachable once inside.
 const APP_HOME = "/app";
 
 export function AuthForm(props: { forgotPasswordHref: string }) {

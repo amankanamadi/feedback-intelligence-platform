@@ -392,6 +392,7 @@ def list_host_complaint_queue(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     status_: Optional[FeedbackStatus] = Query(None, alias="status"),
+    unresolved: Optional[bool] = Query(None),
     current_user: User = Depends(require_role(Role.HOST)),
     db: Session = Depends(get_db),
 ) -> list[FeedbackHostRead]:
@@ -400,7 +401,9 @@ def list_host_complaint_queue(
     # itself, so Starlette would otherwise match "host-queue" as a
     # feedback_id and 422 before this route is ever tried.
     crud.flag_overdue_sla_breaches(db)
-    items = crud.list_feedback_for_host(db, current_user.id, skip=skip, limit=limit, status=status_)
+    items = crud.list_feedback_for_host(
+        db, current_user.id, skip=skip, limit=limit, status=status_, unresolved=unresolved
+    )
     return [_shape_host_feedback(item) for item in items]
 
 

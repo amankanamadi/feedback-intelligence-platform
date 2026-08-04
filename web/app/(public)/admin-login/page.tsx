@@ -10,12 +10,17 @@ export default function AdminLoginPage() {
         <ShieldCheck className="size-8" aria-hidden="true" />
         <span className="text-lg font-semibold text-foreground">Airbnb Operations</span>
       </div>
-      <AuthCard title="Operations Sign In" subtitle="For Customer Support, Operations, Product, and Executive Leadership teams only.">
+      <AuthCard title="Operations Sign In" subtitle="For Customer Support, Operations, Product, Trust & Safety, and Executive Leadership teams only.">
         <AuthForm forgotPasswordHref="/forgot-password" />
       </AuthCard>
-      <Link href="/login" className="text-sm text-muted-foreground hover:underline">
-        Guest or host? Sign in here
-      </Link>
+      <div className="flex flex-col items-center gap-1">
+        <Link href="/login" className="text-sm text-muted-foreground hover:underline">
+          Guest? Sign in here
+        </Link>
+        <Link href="/host-login" className="text-sm text-muted-foreground hover:underline">
+          Host? Sign in here
+        </Link>
+      </div>
     </div>
   );
 }

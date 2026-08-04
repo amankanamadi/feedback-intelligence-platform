@@ -1,6 +1,15 @@
 from app.core.security import hash_password
 from app.database import crud
-from app.database.models import Feedback, MainCategory, Priority, Property, PropertyType, ResponsibleTeam, Role
+from app.database.models import (
+    Feedback,
+    FeedbackStatus,
+    MainCategory,
+    Priority,
+    Property,
+    PropertyType,
+    ResponsibleTeam,
+    Role,
+)
 
 
 def _seed_property(db_session, *, host_id=None, **overrides) -> Property:
@@ -104,3 +113,47 @@ def test_host_queue_item_shape_excludes_staff_only_fields(host_client, db_sessio
     assert "executive_summary" not in body
     assert body["main_category"] == "Host Complaint"
     assert body["responsible_team"] == "Host"
+
+
+def test_host_queue_unresolved_filter_clears_resolved_cases(host_client, db_session):
+    host = host_client.get("/auth/me").json()
+    property_row = _seed_property(db_session, host_id=host["id"])
+    open_case = _seed_feedback(
+        db_session, property_id=property_row.id, responsible_team=ResponsibleTeam.HOST, status=FeedbackStatus.NEW
+    )
+    _seed_feedback(
+        db_session,
+        property_id=property_row.id,
+        responsible_team=ResponsibleTeam.HOST,
+        status=FeedbackStatus.RESOLVED,
+    )
+    _seed_feedback(
+        db_session,
+        property_id=property_row.id,
+        responsible_team=ResponsibleTeam.HOST,
+        status=FeedbackStatus.CLOSED,
+    )
+
+    response = host_client.get("/feedback/host-queue", params={"unresolved": True})
+
+    assert response.status_code == 200
+    items = response.json()
+    assert len(items) == 1
+    assert items[0]["id"] == open_case.id
+
+
+def test_host_queue_without_unresolved_filter_still_includes_resolved_cases(host_client, db_session):
+    host = host_client.get("/auth/me").json()
+    property_row = _seed_property(db_session, host_id=host["id"])
+    _seed_feedback(db_session, property_id=property_row.id, responsible_team=ResponsibleTeam.HOST, status=FeedbackStatus.NEW)
+    _seed_feedback(
+        db_session,
+        property_id=property_row.id,
+        responsible_team=ResponsibleTeam.HOST,
+        status=FeedbackStatus.RESOLVED,
+    )
+
+    response = host_client.get("/feedback/host-queue")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2

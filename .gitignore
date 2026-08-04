@@ -7,3 +7,4 @@ __pycache__/
 .pytest_cache/
 scripts/eval_results.json
 /attachments/
+DEMO_CREDENTIALS.md

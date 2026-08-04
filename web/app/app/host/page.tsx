@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,8 @@ import { Home, Inbox } from "lucide-react";
 export default function HostDashboardPage() {
   const propertiesQuery = useHostProperties();
   const performanceQuery = useHostPerformance();
-  const queueQuery = useHostQueue();
+  const [unresolvedOnly, setUnresolvedOnly] = useState(true);
+  const queueQuery = useHostQueue(undefined, unresolvedOnly);
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,7 +95,17 @@ export default function HostDashboardPage() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-foreground">Complaint queue</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-foreground">Complaint queue</h2>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={unresolvedOnly}
+              onChange={(e) => setUnresolvedOnly(e.target.checked)}
+            />
+            Unresolved only
+          </label>
+        </div>
         <DataState
           query={queueQuery}
           skeleton={<TableSkeleton rows={4} />}
@@ -101,8 +113,12 @@ export default function HostDashboardPage() {
           emptyState={
             <EmptyState
               icon={<Inbox className="size-10" aria-hidden="true" />}
-              title="Nothing routed to you right now"
-              description="Complaints assigned to your properties will show up here."
+              title={unresolvedOnly ? "Nothing open right now" : "Nothing routed to you yet"}
+              description={
+                unresolvedOnly
+                  ? "Resolved and closed cases are hidden - uncheck \"Unresolved only\" to see your full history."
+                  : "Complaints assigned to your properties will show up here."
+              }
             />
           }
         >
