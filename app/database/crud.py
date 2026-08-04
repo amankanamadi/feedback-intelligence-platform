@@ -8,10 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.database.models import (
     Attachment,
+    Booking,
+    BookingStatus,
     Feedback,
     FeedbackSource,
     FeedbackStatus,
     MainCategory,
+    Notification,
     PasswordResetToken,
     Priority,
     Property,
@@ -21,6 +24,7 @@ from app.database.models import (
     Tag,
     Theme,
     User,
+    Wishlist,
 )
 
 logger = logging.getLogger(__name__)
@@ -328,3 +332,82 @@ def get_valid_reset_token(db: Session, token_hash: str) -> PasswordResetToken | 
 def mark_reset_token_used(db: Session, token: PasswordResetToken) -> None:
     token.used_at = datetime.now(timezone.utc)
     db.commit()
+
+
+def create_booking(
+    db: Session,
+    *,
+    confirmation_code: str,
+    guest_id: int,
+    property_id: int,
+    check_in_date,
+    check_out_date,
+    status: BookingStatus = BookingStatus.UPCOMING,
+) -> Booking:
+    booking = Booking(
+        confirmation_code=confirmation_code,
+        guest_id=guest_id,
+        property_id=property_id,
+        check_in_date=check_in_date,
+        check_out_date=check_out_date,
+        status=status,
+    )
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+
+def get_booking_by_confirmation_code(db: Session, confirmation_code: str) -> Booking | None:
+    return db.scalar(select(Booking).where(Booking.confirmation_code == confirmation_code))
+
+
+def get_booking(db: Session, booking_id: int) -> Booking | None:
+    return db.get(Booking, booking_id)
+
+
+def create_notification(
+    db: Session, *, user_id: int, message: str, link: str | None = None
+) -> Notification:
+    notification = Notification(user_id=user_id, message=message, link=link)
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+def list_notifications_for_user(
+    db: Session, user_id: int, *, unread_only: bool = False, limit: int = 50
+) -> list[Notification]:
+    stmt = select(Notification).where(Notification.user_id == user_id)
+    if unread_only:
+        stmt = stmt.where(Notification.read_at.is_(None))
+    stmt = stmt.order_by(Notification.created_at.desc()).limit(limit)
+    return list(db.scalars(stmt))
+
+
+def add_to_wishlist(db: Session, *, guest_id: int, property_id: int) -> Wishlist:
+    existing = db.scalar(
+        select(Wishlist).where(Wishlist.guest_id == guest_id, Wishlist.property_id == property_id)
+    )
+    if existing is not None:
+        return existing
+    wishlist_item = Wishlist(guest_id=guest_id, property_id=property_id)
+    db.add(wishlist_item)
+    db.commit()
+    db.refresh(wishlist_item)
+    return wishlist_item
+
+
+def remove_from_wishlist(db: Session, *, guest_id: int, property_id: int) -> None:
+    existing = db.scalar(
+        select(Wishlist).where(Wishlist.guest_id == guest_id, Wishlist.property_id == property_id)
+    )
+    if existing is not None:
+        db.delete(existing)
+        db.commit()
+
+
+def list_wishlist_for_guest(db: Session, guest_id: int) -> list[Wishlist]:
+    stmt = select(Wishlist).where(Wishlist.guest_id == guest_id).order_by(Wishlist.created_at.desc())
+    return list(db.scalars(stmt))

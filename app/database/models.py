@@ -1,9 +1,9 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Enum, ForeignKey, Table, Column, DateTime, func
+from sqlalchemy import Enum, ForeignKey, Table, Column, DateTime, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -72,6 +72,32 @@ class FeedbackStatus(str, enum.Enum):
     IN_PROGRESS = "In Progress"
     RESOLVED = "Resolved"
     CLOSED = "Closed"
+
+
+class BookingStatus(str, enum.Enum):
+    UPCOMING = "Upcoming"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
+
+
+class GuestDecision(str, enum.Enum):
+    PENDING = "Pending"
+    ACCEPTED = "Accepted"
+    REJECTED = "Rejected"
+
+
+# Where an AI-classified complaint gets routed. Distinct from `Role`: not
+# every team here has a login/dashboard (e.g. Payments/Finance/Engineering
+# are routing labels only, at least for now), whereas `Role` is strictly
+# "who can log in and what can they do."
+class ResponsibleTeam(str, enum.Enum):
+    HOST = "Host"
+    CUSTOMER_SUPPORT = "Customer Support"
+    PAYMENTS = "Payments"
+    FINANCE = "Finance"
+    TRUST_AND_SAFETY = "Trust & Safety"
+    ENGINEERING = "Engineering"
+    PRODUCT = "Product"
 
 
 # Association table for the many-to-many Feedback <-> Theme relationship.
@@ -156,6 +182,54 @@ class Feedback(Base):
     browser: Mapped[Optional[str]]
     platform: Mapped[Optional[str]]
 
+    # Which stay this case is about, when applicable. Guest reviews and
+    # booking-scoped complaints have one; a general app bug report or
+    # feature request typically doesn't.
+    booking_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Guest-submitted stay ratings (1-5, enforced at the Pydantic layer, no
+    # DB-level CHECK - matches the existing `confidence` column's
+    # app-layer-only validation convention). Only populated for
+    # main_category == GUEST_REVIEW. The AI pipeline NEVER writes to these
+    # columns - property/host ratings are computed only from guest input.
+    overall_rating: Mapped[Optional[int]]
+    cleanliness_rating: Mapped[Optional[int]]
+    communication_rating: Mapped[Optional[int]]
+    checkin_rating: Mapped[Optional[int]]
+    location_rating: Mapped[Optional[int]]
+    value_rating: Mapped[Optional[int]]
+
+    # Expanded AI analysis, populated for complaint-style submissions
+    # (Host Complaint / Support Ticket). `recommended_action` above already
+    # covers "recommended resolution" - not duplicated here.
+    root_cause: Mapped[Optional[str]]
+    business_impact: Mapped[Optional[str]]
+    executive_summary: Mapped[Optional[str]]
+    preventive_recommendation: Mapped[Optional[str]]
+    responsible_team: Mapped[Optional[ResponsibleTeam]] = mapped_column(
+        Enum(ResponsibleTeam, name="responsible_team_enum")
+    )
+
+    # Guest resolution workflow: a rejected resolution auto-escalates.
+    guest_decision: Mapped[Optional[GuestDecision]] = mapped_column(
+        Enum(GuestDecision, name="guest_decision_enum")
+    )
+    escalated: Mapped[bool] = mapped_column(default=False, server_default="false")
+    escalated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # SLA tracking - `sla_due_at` computed from priority at classification
+    # time; `sla_breached` flipped by a periodic/on-read check against it.
+    sla_due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_breached: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+    # Set when semantic duplicate-complaint detection (tightened RAG
+    # similarity search) links this item to an earlier, near-identical one.
+    duplicate_of_feedback_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("feedback.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -163,6 +237,7 @@ class Feedback(Base):
 
     submitter: Mapped[Optional["User"]] = relationship(back_populates="feedback_items")
     property: Mapped[Optional["Property"]] = relationship(back_populates="feedback_items")
+    booking: Mapped[Optional["Booking"]] = relationship(back_populates="feedback_items")
     themes: Mapped[list["Theme"]] = relationship(
         secondary=feedback_themes, back_populates="feedback_items"
     )
@@ -175,8 +250,13 @@ class Feedback(Base):
 class Property(Base):
     """A listing that guest reviews, host complaints, and support tickets can reference.
 
-    Static reference data - seeded once, no create/update/delete API. Not
-    linked to a host's User account; `host_name` is descriptive only.
+    Static reference data - seeded once, no create/update/delete API.
+    `host_id` is the source of truth for "who owns this listing" (used to
+    scope a host's complaint queue); `host_name` stays as a denormalized
+    display cache so existing display code doesn't need a join, but new
+    code should treat `host_id` as authoritative. `host_id` is nullable
+    for migration safety with pre-existing rows, not because a listing can
+    legitimately have no host.
     """
 
     __tablename__ = "properties"
@@ -184,12 +264,46 @@ class Property(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     host_name: Mapped[str]
+    host_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     city: Mapped[str] = mapped_column(index=True)
     country: Mapped[str]
     property_type: Mapped[PropertyType] = mapped_column(Enum(PropertyType, name="property_type_enum"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    host: Mapped[Optional["User"]] = relationship(back_populates="hosted_properties")
     feedback_items: Mapped[list["Feedback"]] = relationship(back_populates="property")
+
+
+class Booking(Base):
+    """A stay linking a guest to a property - the anchor for the review and
+    complaint workflows.
+
+    `confirmation_code` is the human-facing "Booking ID" a guest types in
+    to submit a review or complaint - a separate short code rather than
+    exposing the raw integer primary key, so booking IDs aren't
+    sequentially guessable.
+    """
+
+    __tablename__ = "bookings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    confirmation_code: Mapped[str] = mapped_column(unique=True, index=True)
+    guest_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    property_id: Mapped[int] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), index=True)
+    check_in_date: Mapped[date]
+    check_out_date: Mapped[date]
+    status: Mapped[BookingStatus] = mapped_column(
+        Enum(BookingStatus, name="booking_status_enum"),
+        default=BookingStatus.UPCOMING,
+        server_default="UPCOMING",
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    guest: Mapped["User"] = relationship()
+    property: Mapped["Property"] = relationship()
+    feedback_items: Mapped[list["Feedback"]] = relationship(back_populates="booking")
 
 
 class Theme(Base):
@@ -244,6 +358,7 @@ class Role(str, enum.Enum):
     SUPPORT_MANAGER = "SUPPORT_MANAGER"
     OPS_MANAGER = "OPS_MANAGER"
     PRODUCT_MANAGER = "PRODUCT_MANAGER"
+    TRUST_SAFETY = "TRUST_SAFETY"
     EXEC = "EXEC"
 
 
@@ -265,6 +380,7 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     feedback_items: Mapped[list["Feedback"]] = relationship(back_populates="submitter")
+    hosted_properties: Mapped[list["Property"]] = relationship(back_populates="host")
 
 
 class PasswordResetToken(Base):
@@ -280,3 +396,31 @@ class PasswordResetToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="reset_tokens")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    message: Mapped[str]
+    link: Mapped[Optional[str]]
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship()
+
+
+class Wishlist(Base):
+    """A guest's saved/wishlisted property."""
+
+    __tablename__ = "wishlists"
+    __table_args__ = (UniqueConstraint("guest_id", "property_id", name="uq_wishlist_guest_property"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    guest_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    property_id: Mapped[int] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    guest: Mapped["User"] = relationship()
+    property: Mapped["Property"] = relationship()
