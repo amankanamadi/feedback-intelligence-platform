@@ -19,6 +19,9 @@ export function PropertyHealthTable({ data }: { data: PropertyHealth[] }) {
             <th className="px-2 py-2">City</th>
             <th className="px-2 py-2">Health score</th>
             <th className="px-2 py-2">Feedback</th>
+            <th className="px-2 py-2">Open maintenance</th>
+            <th className="px-2 py-2">SLA breached</th>
+            <th className="px-2 py-2">Avg. cleanliness</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -34,6 +37,9 @@ export function PropertyHealthTable({ data }: { data: PropertyHealth[] }) {
                 {row.health_score}
               </td>
               <td className="px-2 py-2 text-muted-foreground">{row.feedback_count}</td>
+              <td className="px-2 py-2 text-muted-foreground">{row.open_maintenance_count}</td>
+              <td className="px-2 py-2 text-muted-foreground">{row.sla_breached_count}</td>
+              <td className="px-2 py-2 text-muted-foreground">{row.avg_cleanliness_rating ?? "—"}</td>
             </tr>
           ))}
         </tbody>

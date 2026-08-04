@@ -1,12 +1,14 @@
 "use client";
 
 import { FileClock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useWeeklyReportMutation } from "@/hooks/use-weekly-report";
-import { isApiError } from "@/lib/auth";
+import { isApiError, useAuth } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
+import { ROLE_LABELS } from "@/types/auth";
 import type { FeedbackExcerpt } from "@/types/analytics";
 
 function BulletList({ label, items }: { label: string; items: string[] }) {
@@ -44,11 +46,18 @@ function ExcerptList({ label, items }: { label: string; items: FeedbackExcerpt[]
 
 export function WeeklyReportPanel() {
   const reportMutation = useWeeklyReportMutation();
+  const { user } = useAuth();
 
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="text-base">Weekly executive summary</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-base">Weekly executive summary</CardTitle>
+          {/* The backend auto-selects one of 5 role-specific framings by
+              the caller's own role - this just labels which one you're
+              looking at, it doesn't change what gets requested. */}
+          {user && <Badge variant="muted">Framed for {ROLE_LABELS[user.role]}</Badge>}
+        </div>
         <Button size="sm" onClick={() => reportMutation.mutate()} isLoading={reportMutation.isPending}>
           Generate report
         </Button>
@@ -75,6 +84,13 @@ export function WeeklyReportPanel() {
             <BulletList label="Key wins" items={reportMutation.data.key_wins} />
             <BulletList label="Key concerns" items={reportMutation.data.key_concerns} />
             <BulletList label="Recommended actions" items={reportMutation.data.recommended_actions} />
+            <BulletList label="Emerging risks" items={reportMutation.data.emerging_risks} />
+            {reportMutation.data.forecast && (
+              <div>
+                <p className="text-sm font-medium text-foreground">Forecast</p>
+                <p className="text-sm text-muted-foreground">{reportMutation.data.forecast}</p>
+              </div>
+            )}
             <ExcerptList label="Top concerns" items={reportMutation.data.top_concerns} />
             <ExcerptList label="Positive highlights" items={reportMutation.data.positive_highlights} />
           </div>

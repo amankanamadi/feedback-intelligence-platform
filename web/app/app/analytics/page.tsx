@@ -1,11 +1,13 @@
 "use client";
 
 import { CategoryBarChart } from "@/components/admin/charts/CategoryBarChart";
+import { ComplaintHeatmapGrid } from "@/components/admin/charts/ComplaintHeatmapGrid";
 import { ConfidenceBarChart } from "@/components/admin/charts/ConfidenceBarChart";
 import { FeatureRequestTrendChart } from "@/components/admin/charts/FeatureRequestTrendChart";
 import { MostAffectedCitiesChart } from "@/components/admin/charts/MostAffectedCitiesChart";
 import { SentimentPieChart } from "@/components/admin/charts/SentimentPieChart";
 import { TopThemesChart } from "@/components/admin/charts/TopThemesChart";
+import { WeeklySentimentTrendChart } from "@/components/admin/charts/WeeklySentimentTrendChart";
 import { WeeklyTrendChart } from "@/components/admin/charts/WeeklyTrendChart";
 import { HostPerformanceTable } from "@/components/admin/HostPerformanceTable";
 import { KpiCards } from "@/components/admin/KpiCards";
@@ -63,6 +65,11 @@ export default function AnalyticsPage() {
             {(analytics) => <WeeklyTrendChart data={analytics.weekly_trend} />}
           </DataState>
         </ChartCard>
+        <ChartCard title="Weekly sentiment trend">
+          <DataState query={analyticsQuery} skeleton={<Skeleton className="h-full w-full" />}>
+            {(analytics) => <WeeklySentimentTrendChart data={analytics.weekly_sentiment_trend} />}
+          </DataState>
+        </ChartCard>
         <ChartCard title="Top themes">
           <DataState query={themesQuery} skeleton={<Skeleton className="h-full w-full" />}>
             {(themes) => <TopThemesChart data={themes} />}
@@ -79,6 +86,17 @@ export default function AnalyticsPage() {
           </DataState>
         </ChartCard>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Complaint heatmap</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataState query={analyticsQuery} skeleton={<Skeleton className="h-48 w-full" />}>
+            {(analytics) => <ComplaintHeatmapGrid data={analytics.complaint_heatmap} />}
+          </DataState>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
