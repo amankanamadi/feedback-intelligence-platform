@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database.models import (
@@ -91,6 +91,13 @@ def create_feedback(
     device: str | None = None,
     browser: str | None = None,
     platform: str | None = None,
+    booking_id: int | None = None,
+    overall_rating: int | None = None,
+    cleanliness_rating: int | None = None,
+    communication_rating: int | None = None,
+    checkin_rating: int | None = None,
+    location_rating: int | None = None,
+    value_rating: int | None = None,
 ) -> Feedback:
     existing_id = db.scalar(select(Feedback.id).where(Feedback.raw_text == raw_text).limit(1))
     if existing_id is not None:
@@ -111,6 +118,13 @@ def create_feedback(
         device=device,
         browser=browser,
         platform=platform,
+        booking_id=booking_id,
+        overall_rating=overall_rating,
+        cleanliness_rating=cleanliness_rating,
+        communication_rating=communication_rating,
+        checkin_rating=checkin_rating,
+        location_rating=location_rating,
+        value_rating=value_rating,
     )
     if theme_names:
         feedback.themes = _resolve_themes(db, theme_names)
@@ -411,3 +425,30 @@ def remove_from_wishlist(db: Session, *, guest_id: int, property_id: int) -> Non
 def list_wishlist_for_guest(db: Session, guest_id: int) -> list[Wishlist]:
     stmt = select(Wishlist).where(Wishlist.guest_id == guest_id).order_by(Wishlist.created_at.desc())
     return list(db.scalars(stmt))
+
+
+def get_property_average_ratings(db: Session, property_ids: list[int]) -> dict[int, float]:
+    """Average `overall_rating` per property, computed only from
+    guest-submitted stay reviews (rows where overall_rating is set) - the
+    AI classification pipeline never writes to that column, so this can
+    never be influenced by anything but real guest input.
+    """
+    if not property_ids:
+        return {}
+    stmt = (
+        select(Feedback.property_id, func.avg(Feedback.overall_rating))
+        .where(Feedback.property_id.in_(property_ids), Feedback.overall_rating.is_not(None))
+        .group_by(Feedback.property_id)
+    )
+    return {property_id: round(float(avg), 1) for property_id, avg in db.execute(stmt).all()}
+
+
+def has_review_for_booking(db: Session, booking_id: int) -> bool:
+    """Whether a stay review has already been submitted for this booking -
+    enforces one review per completed stay."""
+    existing_id = db.scalar(
+        select(Feedback.id)
+        .where(Feedback.booking_id == booking_id, Feedback.overall_rating.is_not(None))
+        .limit(1)
+    )
+    return existing_id is not None

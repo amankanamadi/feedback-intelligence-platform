@@ -13,6 +13,13 @@ SUBMITTER_FACING_FIELDS = {
     "property_id",
     "property_name",
     "property_city",
+    "booking_id",
+    "overall_rating",
+    "cleanliness_rating",
+    "communication_rating",
+    "checkin_rating",
+    "location_rating",
+    "value_rating",
     "created_at",
     "updated_at",
 }

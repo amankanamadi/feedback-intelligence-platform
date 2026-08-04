@@ -17,7 +17,15 @@ from app.api.schemas import (
 from app.core.config import get_settings
 from app.core.security import RequireManager, STAFF_ROLES, assert_owns_or_staff, get_current_user
 from app.database import crud
-from app.database.models import Feedback, FeedbackSource, MainCategory, Sentiment, User
+from app.database.models import (
+    Booking,
+    BookingStatus,
+    Feedback,
+    FeedbackSource,
+    MainCategory,
+    Sentiment,
+    User,
+)
 from app.database.session import get_db
 from app.services.acknowledgement import generate_acknowledgement
 from app.vector_store.embeddings import get_embedding
@@ -56,7 +64,39 @@ def _validate_property_id(db: Session, property_id: Optional[int]) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Property {property_id} not found")
 
 
-def _process_feedback_submission(db: Session, payload: FeedbackCreate, *, owner_user_id: Optional[int]) -> Feedback:
+def _validate_booking(
+    db: Session, booking_id: Optional[int], *, is_review: bool, current_user: User
+) -> Optional[Booking]:
+    """Resolves and authorizes a stay-review/complaint's booking. A stay
+    review additionally requires the booking to be COMPLETED (the guest
+    workflow is "once a booking is completed...") and that no review has
+    already been submitted for it - one review per stay.
+    """
+    if booking_id is None:
+        return None
+
+    booking = crud.get_booking(db, booking_id)
+    if booking is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Booking {booking_id} not found")
+    assert_owns_or_staff(booking.guest_id, current_user)
+
+    if is_review:
+        if booking.status != BookingStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Stay reviews can only be submitted for completed bookings.",
+            )
+        if crud.has_review_for_booking(db, booking_id):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A stay review has already been submitted for this booking.",
+            )
+    return booking
+
+
+def _process_feedback_submission(
+    db: Session, payload: FeedbackCreate, *, owner_user_id: Optional[int], current_user: User
+) -> Feedback:
     """Create + embed + retrieve RAG context + classify + acknowledge a
     single item. Shared by the single-item and bulk endpoints so both go
     through identical logic. Each AI step degrades independently on
@@ -64,7 +104,12 @@ def _process_feedback_submission(db: Session, payload: FeedbackCreate, *, owner_
     raw feedback); the acknowledgement step never fails since it's a pure
     template lookup, not a network call.
     """
-    _validate_property_id(db, payload.property_id)
+    is_review = payload.overall_rating is not None
+    booking = _validate_booking(db, payload.booking_id, is_review=is_review, current_user=current_user)
+    # A review's property always matches its booking, regardless of
+    # whatever property_id the client sent - the booking is authoritative.
+    property_id = booking.property_id if booking is not None else payload.property_id
+    _validate_property_id(db, property_id)
 
     feedback = crud.create_feedback(
         db,
@@ -74,11 +119,18 @@ def _process_feedback_submission(db: Session, payload: FeedbackCreate, *, owner_
         name=payload.name,
         email=payload.email,
         source=payload.source,
-        property_id=payload.property_id,
+        property_id=property_id,
         version=payload.version,
         device=payload.device,
         browser=payload.browser,
         platform=payload.platform,
+        booking_id=payload.booking_id,
+        overall_rating=payload.overall_rating,
+        cleanliness_rating=payload.cleanliness_rating,
+        communication_rating=payload.communication_rating,
+        checkin_rating=payload.checkin_rating,
+        location_rating=payload.location_rating,
+        value_rating=payload.value_rating,
     )
 
     embedding = None
@@ -99,10 +151,18 @@ def _process_feedback_submission(db: Session, payload: FeedbackCreate, *, owner_
         logger.exception("AI classification failed for feedback %s; leaving unclassified", feedback.id)
     else:
         try:
+            # A stay review's main_category is deterministic from the
+            # workflow itself (ratings + a completed booking mean it's a
+            # Guest Review, full stop) - never left to the AI's judgment,
+            # even if a scathing review reads more like a complaint to it.
+            # Everything else (sub_category, sentiment, themes, summary,
+            # priority, recommended_action) still comes from real AI
+            # analysis of the written text.
+            main_category = MainCategory.GUEST_REVIEW if is_review else classification.main_category
             feedback = crud.apply_classification(
                 db,
                 feedback,
-                main_category=classification.main_category,
+                main_category=main_category,
                 sub_category=classification.sub_category,
                 sentiment=classification.sentiment,
                 priority=classification.priority,
@@ -138,7 +198,7 @@ def submit_feedback(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Union[FeedbackStaffRead, FeedbackSubmitterRead]:
-    feedback = _process_feedback_submission(db, payload, owner_user_id=current_user.id)
+    feedback = _process_feedback_submission(db, payload, owner_user_id=current_user.id, current_user=current_user)
     return _shape_feedback(feedback, current_user)
 
 
@@ -153,7 +213,9 @@ def bulk_upload_feedback(
     # visible only to staff (a NULL owner never matches a GUEST/HOST's
     # ownership check).
     return [
-        _shape_feedback(_process_feedback_submission(db, item, owner_user_id=None), current_user)
+        _shape_feedback(
+            _process_feedback_submission(db, item, owner_user_id=None, current_user=current_user), current_user
+        )
         for item in payload.items
     ]
 
@@ -186,7 +248,9 @@ async def bulk_upload_feedback_file(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail) from exc
 
     return [
-        _shape_feedback(_process_feedback_submission(db, item, owner_user_id=None), current_user)
+        _shape_feedback(
+            _process_feedback_submission(db, item, owner_user_id=None, current_user=current_user), current_user
+        )
         for item in payload.items
     ]
 

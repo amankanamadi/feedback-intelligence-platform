@@ -23,4 +23,14 @@ def list_properties(
 ) -> list[PropertyRead]:
     # Static reference data, open to any authenticated user - guests/hosts
     # need this list to pick a property when submitting feedback.
-    return crud.list_properties(db, skip=skip, limit=limit, search=search, city=city)
+    properties = crud.list_properties(db, skip=skip, limit=limit, search=search, city=city)
+    # average_rating isn't a Property column, so from_attributes can't pick
+    # it up - computed from guest-submitted ratings only (never AI) and
+    # filled in here, same pattern as FeedbackSubmitterRead.property_name.
+    ratings = crud.get_property_average_ratings(db, [p.id for p in properties])
+    shaped = []
+    for property_row in properties:
+        item = PropertyRead.model_validate(property_row)
+        item.average_rating = ratings.get(property_row.id)
+        shaped.append(item)
+    return shaped

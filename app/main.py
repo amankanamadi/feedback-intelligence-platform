@@ -10,6 +10,7 @@ from sqlalchemy.exc import OperationalError
 from app.api.analytics import router as analytics_router
 from app.api.attachments import router as attachments_router
 from app.api.auth import router as auth_router
+from app.api.bookings import router as bookings_router
 from app.api.feedback import router as feedback_router
 from app.api.feedback_export import router as feedback_export_router
 from app.api.properties import router as properties_router
@@ -51,6 +52,7 @@ app.include_router(analytics_router)
 app.include_router(reports_router)
 app.include_router(attachments_router)
 app.include_router(properties_router)
+app.include_router(bookings_router)
 
 
 @app.exception_handler(OperationalError)
