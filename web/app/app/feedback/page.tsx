@@ -2,12 +2,10 @@
 
 import { FeedbackListAdmin } from "@/components/feedback/FeedbackListAdmin";
 import { FeedbackListUser } from "@/components/feedback/FeedbackListUser";
-import { useAuth } from "@/lib/auth";
-import { STAFF_ROLES } from "@/types/auth";
+import { useIsStaff } from "@/hooks/use-is-staff";
 
 export default function FeedbackPage() {
-  const { user } = useAuth();
-  const isStaff = !!user && STAFF_ROLES.includes(user.role);
+  const isStaff = useIsStaff();
 
   return (
     <div className="flex flex-col gap-6">

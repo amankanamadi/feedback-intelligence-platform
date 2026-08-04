@@ -4,12 +4,10 @@ import Link from "next/link";
 import { BarChart3, MessageSquareHeart, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/lib/auth";
-import { STAFF_ROLES } from "@/types/auth";
+import { useIsStaff } from "@/hooks/use-is-staff";
 
 export default function AppHomePage() {
-  const { user } = useAuth();
-  const isStaff = !!user && STAFF_ROLES.includes(user.role);
+  const isStaff = useIsStaff();
 
   return (
     <div className="flex flex-col gap-6">

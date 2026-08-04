@@ -25,6 +25,15 @@ export type FeedbackSource =
   | "API"
   | "QR Code";
 export type PropertyType = "Entire Home" | "Private Room" | "Shared Room";
+export type ResponsibleTeam =
+  | "Host"
+  | "Customer Support"
+  | "Payments"
+  | "Finance"
+  | "Trust & Safety"
+  | "Engineering"
+  | "Product";
+export type GuestDecisionValue = "Pending" | "Accepted" | "Rejected";
 
 export const STATUS_OPTIONS: FeedbackStatus[] = ["New", "Acknowledged", "In Review", "In Progress", "Resolved", "Closed"];
 export const PRIORITY_OPTIONS: Priority[] = ["Low", "Medium", "High", "Critical"];
@@ -46,6 +55,7 @@ export type Property = {
   city: string;
   country: string;
   property_type: PropertyType;
+  average_rating: number | null;
 };
 
 // Shape returned to a GUEST/HOST-role caller - deliberately has no
@@ -65,6 +75,14 @@ export type FeedbackUser = {
   property_id: number | null;
   property_name: string | null;
   property_city: string | null;
+  booking_id: number | null;
+  overall_rating: number | null;
+  cleanliness_rating: number | null;
+  communication_rating: number | null;
+  checkin_rating: number | null;
+  location_rating: number | null;
+  value_rating: number | null;
+  guest_decision: GuestDecisionValue | null;
   created_at: string;
   updated_at: string;
 };
@@ -91,7 +109,40 @@ export type FeedbackAdmin = FeedbackUser & {
   device: string | null;
   browser: string | null;
   platform: string | null;
+  root_cause: string | null;
+  business_impact: string | null;
+  executive_summary: string | null;
+  preventive_recommendation: string | null;
+  responsible_team: ResponsibleTeam | null;
+  sla_due_at: string | null;
+  sla_breached: boolean;
+  duplicate_of_feedback_id: number | null;
+  escalated: boolean;
+  escalated_at: string | null;
 };
+
+// Shape returned to a HOST viewing their property's complaint queue
+// (GET /feedback/host-queue) - a submitter's own view plus just enough
+// AI context to act on the complaint. Deliberately excludes staff-only
+// bookkeeping (internal_notes, tags, confidence, themes) and
+// leadership-framing fields (executive_summary, preventive_recommendation).
+export type FeedbackHostRead = FeedbackUser & {
+  main_category: MainCategory | null;
+  sub_category: SubCategory | null;
+  sentiment: Sentiment | null;
+  priority: Priority | null;
+  recommended_action: string | null;
+  root_cause: string | null;
+  business_impact: string | null;
+  responsible_team: ResponsibleTeam | null;
+  sla_due_at: string | null;
+  sla_breached: boolean;
+  duplicate_of_feedback_id: number | null;
+};
+
+// POST /feedback/{id}/decision body - "Pending" is a valid current-state
+// default but never a valid submission (the backend validator rejects it).
+export type FeedbackDecisionCreate = { decision: "Accepted" | "Rejected" };
 
 export type FeedbackCreatePayload = {
   raw_text: string;
@@ -108,6 +159,8 @@ export type FeedbackAdminUpdatePayload = {
   tags?: string[];
   internal_notes?: string;
   admin_response?: string;
+  main_category?: MainCategory;
+  responsible_team?: ResponsibleTeam;
 };
 
 export type FeedbackListFilters = {
@@ -118,4 +171,11 @@ export type FeedbackListFilters = {
   search?: string;
   source?: FeedbackSource;
   property_id?: number;
+  priority?: Priority;
+  status?: FeedbackStatus;
+  responsible_team?: ResponsibleTeam;
+  escalated?: boolean;
+  sla_breached?: boolean;
+  unresolved?: boolean;
+  has_duplicates?: boolean;
 };

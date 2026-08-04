@@ -13,9 +13,8 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
+import { useIsStaff } from "@/hooks/use-is-staff";
 import { cn } from "@/lib/utils";
-import { STAFF_ROLES } from "@/types/auth";
 
 type NavItem = {
   href: string;
@@ -72,8 +71,7 @@ function findActiveHref(pathname: string): string | null {
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { user } = useAuth();
-  const isStaff = !!user && STAFF_ROLES.includes(user.role);
+  const isStaff = useIsStaff();
   const activeHref = findActiveHref(pathname);
 
   return (

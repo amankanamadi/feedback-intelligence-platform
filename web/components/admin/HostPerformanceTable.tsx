@@ -18,7 +18,7 @@ export function HostPerformanceTable({ data }: { data: HostPerformance[] }) {
         </thead>
         <tbody className="divide-y divide-border">
           {data.map((row) => (
-            <tr key={row.host_name}>
+            <tr key={row.host_id}>
               <td className="px-2 py-2 text-foreground">{row.host_name}</td>
               <td className="px-2 py-2 text-muted-foreground">{row.feedback_count}</td>
               <td

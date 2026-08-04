@@ -3,8 +3,29 @@ export type CategoryCount = { main_category: string; count: number };
 export type WeeklyTrendPoint = { week_start: string; count: number };
 export type ConfidenceBucket = { range: string; count: number };
 export type CityBreakdown = { city: string; feedback_count: number; negative_rate: number };
-export type PropertyHealth = { property_id: number; property_name: string; city: string; health_score: number; feedback_count: number };
-export type HostPerformance = { host_name: string; feedback_count: number; avg_sentiment_score: number; open_critical_count: number };
+export type PropertyHealth = {
+  property_id: number;
+  property_name: string;
+  city: string;
+  health_score: number;
+  feedback_count: number;
+  open_maintenance_count: number;
+  sla_breached_count: number;
+  avg_cleanliness_rating: number | null;
+};
+export type HostPerformance = {
+  host_id: number;
+  host_name: string;
+  feedback_count: number;
+  avg_sentiment_score: number;
+  open_critical_count: number;
+  sla_breached_count: number;
+  escalated_count: number;
+  avg_guest_rating: number | null;
+  performance_score: number;
+};
+export type HeatmapCell = { city: string; sub_category: string; count: number };
+export type WeeklySentimentPoint = { week_start: string; positive: number; neutral: number; negative: number };
 
 export type AnalyticsSummary = {
   total_feedback: number;
@@ -27,6 +48,8 @@ export type AnalyticsSummary = {
   avg_resolution_time_hours: number | null;
   safety_alerts_open_count: number;
   feature_request_trend: WeeklyTrendPoint[];
+  complaint_heatmap: HeatmapCell[];
+  weekly_sentiment_trend: WeeklySentimentPoint[];
 };
 
 export type ThemeFrequency = { name: string; count: number };
@@ -50,4 +73,6 @@ export type WeeklyReportResponse = {
   key_wins: string[];
   key_concerns: string[];
   recommended_actions: string[];
+  emerging_risks: string[];
+  forecast: string;
 };

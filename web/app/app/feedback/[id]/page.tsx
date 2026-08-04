@@ -8,14 +8,13 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { FeedbackDetailAdmin } from "@/components/feedback/FeedbackDetailAdmin";
 import { FeedbackDetailUser } from "@/components/feedback/FeedbackDetailUser";
 import { useFeedbackDetail } from "@/hooks/use-feedback-detail";
-import { useAuth } from "@/lib/auth";
+import { useIsStaff } from "@/hooks/use-is-staff";
 import type { FeedbackAdmin, FeedbackUser } from "@/types/feedback";
-import { STAFF_ROLES } from "@/types/auth";
 
 export default function FeedbackDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  const { user } = useAuth();
+  const isStaff = useIsStaff();
   const query = useFeedbackDetail(id);
 
   if (!Number.isFinite(id)) {
@@ -31,7 +30,7 @@ export default function FeedbackDetailPage() {
   return (
     <DataState query={query} skeleton={<DetailSkeleton />}>
       {(feedback) =>
-        !!user && STAFF_ROLES.includes(user.role) ? (
+        isStaff ? (
           <FeedbackDetailAdmin feedback={feedback as FeedbackAdmin} />
         ) : (
           <FeedbackDetailUser feedback={feedback as FeedbackUser} />

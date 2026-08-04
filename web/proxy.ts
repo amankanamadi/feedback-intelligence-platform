@@ -12,10 +12,10 @@ import type { NextRequest } from "next/server";
 const API_BASE_URL =
   process.env.INTERNAL_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-type Role = "GUEST" | "HOST" | "SUPPORT_MANAGER" | "OPS_MANAGER" | "PRODUCT_MANAGER" | "EXEC";
+type Role = "GUEST" | "HOST" | "SUPPORT_MANAGER" | "OPS_MANAGER" | "PRODUCT_MANAGER" | "TRUST_SAFETY" | "EXEC";
 type Me = { role: Role } | null;
 
-const STAFF_ROLES = new Set<Role>(["SUPPORT_MANAGER", "OPS_MANAGER", "PRODUCT_MANAGER", "EXEC"]);
+const STAFF_ROLES = new Set<Role>(["SUPPORT_MANAGER", "OPS_MANAGER", "PRODUCT_MANAGER", "TRUST_SAFETY", "EXEC"]);
 
 // Both login entry points ("Login to Give Feedback" and "Operations Login")
 // land here regardless of role - one app, not two portals.
