@@ -44,6 +44,11 @@ const STAFF_ONLY_SEGMENTS = [
 // host-only page.
 const HOST_ONLY_SEGMENTS = ["/app/host"];
 
+// Same rationale, for the one guest-only page. /app/properties is
+// deliberately NOT in any of these arrays - browsing listings is open to
+// every role, matching GET /properties's own design.
+const GUEST_ONLY_SEGMENTS = ["/app/wishlist"];
+
 async function fetchMe(cookieHeader: string | null): Promise<Me> {
   if (!cookieHeader) return null;
   try {
@@ -86,6 +91,9 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL(APP_HOME, request.url));
     }
     if (HOST_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && me.role !== "HOST") {
+      return NextResponse.redirect(new URL(APP_HOME, request.url));
+    }
+    if (GUEST_ONLY_SEGMENTS.some((segment) => isUnderSegment(pathname, segment)) && me.role !== "GUEST") {
       return NextResponse.redirect(new URL(APP_HOME, request.url));
     }
   }

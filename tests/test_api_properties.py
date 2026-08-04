@@ -175,3 +175,32 @@ def test_submit_feedback_with_valid_property_id_succeeds(user_client, db_session
     assert body["property_id"] == property_row.id
     assert body["property_name"] == "Sunny Loft"
     assert body["property_city"] == "Austin"
+
+
+def test_get_property_returns_expected_shape(user_client, db_session):
+    (property_row,) = _seed_properties(db_session)[:1]
+
+    response = user_client.get(f"/properties/{property_row.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == property_row.id
+    assert body["name"] == "Sunny Loft"
+    assert body["city"] == "Austin"
+    assert body["country"] == "USA"
+    assert body["property_type"] == "Entire Home"
+    assert body["average_rating"] is None
+
+
+def test_get_property_404_for_unknown_id(user_client):
+    response = user_client.get("/properties/999999")
+
+    assert response.status_code == 404
+
+
+def test_get_property_requires_authentication(client, db_session):
+    (property_row,) = _seed_properties(db_session)[:1]
+
+    response = client.get(f"/properties/{property_row.id}")
+
+    assert response.status_code == 401

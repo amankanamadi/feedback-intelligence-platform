@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.schemas import PropertyRead
@@ -37,3 +37,18 @@ def list_properties(
         item.average_rating = ratings.get(property_row.id)
         shaped.append(item)
     return shaped
+
+
+@router.get("/properties/{property_id}", response_model=PropertyRead)
+def get_property(
+    property_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PropertyRead:
+    property_row = crud.get_property(db, property_id)
+    if property_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+    ratings = crud.get_property_average_ratings(db, [property_id])
+    item = PropertyRead.model_validate(property_row)
+    item.average_rating = ratings.get(property_id)
+    return item

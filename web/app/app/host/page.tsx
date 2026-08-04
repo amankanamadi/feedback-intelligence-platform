@@ -8,7 +8,7 @@ import { DataState } from "@/components/shared/DataState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ListSkeleton, TableSkeleton } from "@/components/shared/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PropertyCard } from "@/components/host/PropertyCard";
+import { PropertyCard } from "@/components/property/PropertyCard";
 import { RespondDialog } from "@/components/host/RespondDialog";
 import { useHostProperties } from "@/hooks/use-host-properties";
 import { useHostPerformance } from "@/hooks/use-host-performance";

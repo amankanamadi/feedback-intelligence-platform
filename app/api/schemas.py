@@ -345,3 +345,13 @@ class NotificationRead(BaseModel):
     link: Optional[str] = None
     read_at: Optional[datetime] = None
     created_at: datetime
+
+
+class WishlistRead(BaseModel):
+    """A guest's saved property - see GET/POST/DELETE /wishlist."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    property: PropertyRead

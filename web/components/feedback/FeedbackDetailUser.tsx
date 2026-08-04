@@ -1,6 +1,22 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { useSubmitFeedbackDecisionMutation } from "@/hooks/use-feedback-decision";
 import { API_BASE_URL } from "@/lib/api-client";
+import { isApiError } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import type { FeedbackUser } from "@/types/feedback";
 
@@ -15,12 +31,26 @@ export function FeedbackDetailUser({ feedback }: { feedback: FeedbackUser }) {
     acknowledgement,
     admin_response,
     admin_response_at,
+    guest_decision,
     attachments,
     property_name,
     property_city,
     created_at,
     updated_at,
   } = feedback;
+
+  const [confirmReject, setConfirmReject] = useState(false);
+  const decisionMutation = useSubmitFeedbackDecisionMutation(id);
+
+  const handleDecision = (decision: "Accepted" | "Rejected") => {
+    decisionMutation.mutate(
+      { decision },
+      {
+        onSuccess: () => setConfirmReject(false),
+        onError: (error) => toast.error(isApiError(error) ? error.message : "Something went wrong. Please try again."),
+      }
+    );
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -71,12 +101,47 @@ export function FeedbackDetailUser({ feedback }: { feedback: FeedbackUser }) {
           <CardHeader>
             <CardTitle className="text-base">Response from our team</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-1">
+          <CardContent className="flex flex-col gap-3">
             <p className="text-sm text-foreground">{admin_response}</p>
             {admin_response_at && <p className="text-xs text-muted-foreground">{formatDateTime(admin_response_at)}</p>}
+
+            {guest_decision ? (
+              <Badge variant={guest_decision === "Accepted" ? "success" : "destructive"} className="w-fit">
+                You {guest_decision.toLowerCase()} this resolution
+              </Badge>
+            ) : (
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  isLoading={decisionMutation.isPending && decisionMutation.variables?.decision === "Accepted"}
+                  onClick={() => handleDecision("Accepted")}
+                >
+                  Accept resolution
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirmReject(true)}>
+                  Reject resolution
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={confirmReject} onOpenChange={setConfirmReject}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject this resolution?</DialogTitle>
+            <DialogDescription>
+              This escalates your feedback to a manager for further review. This can&apos;t be undone once submitted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="destructive" isLoading={decisionMutation.isPending} onClick={() => handleDecision("Rejected")}>
+              Confirm reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {attachments.length > 0 && (
         <Card>

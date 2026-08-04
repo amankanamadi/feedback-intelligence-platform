@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Building2,
   FileClock,
+  Heart,
   Home,
   Inbox,
   MessageSquarePlus,
@@ -14,6 +16,7 @@ import {
   User,
   Users,
 } from "lucide-react";
+import { useIsGuest } from "@/hooks/use-is-guest";
 import { useIsHost } from "@/hooks/use-is-host";
 import { useIsStaff } from "@/hooks/use-is-staff";
 import { cn } from "@/lib/utils";
@@ -28,6 +31,7 @@ type NavGroup = {
   label?: string;
   staffOnly?: boolean;
   hostOnly?: boolean;
+  guestOnly?: boolean;
   items: NavItem[];
 };
 
@@ -38,8 +42,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/app/feedback/new", label: "Submit Feedback", icon: MessageSquarePlus },
       { href: "/app/feedback", label: "Feedback", icon: Inbox },
+      { href: "/app/properties", label: "Properties", icon: Building2 },
       { href: "/app/profile", label: "Profile", icon: User },
     ],
+  },
+  {
+    label: "Guest",
+    guestOnly: true,
+    items: [{ href: "/app/wishlist", label: "My Wishlist", icon: Heart }],
   },
   {
     label: "Host",
@@ -81,11 +91,14 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const isStaff = useIsStaff();
   const isHost = useIsHost();
+  const isGuest = useIsGuest();
   const activeHref = findActiveHref(pathname);
 
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 pb-6">
-      {NAV_GROUPS.filter((group) => (!group.staffOnly || isStaff) && (!group.hostOnly || isHost)).map((group, index) => (
+      {NAV_GROUPS.filter(
+        (group) => (!group.staffOnly || isStaff) && (!group.hostOnly || isHost) && (!group.guestOnly || isGuest)
+      ).map((group, index) => (
         <div key={group.label ?? index} className="flex flex-col gap-1">
           {group.label && (
             <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
