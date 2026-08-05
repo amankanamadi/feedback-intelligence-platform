@@ -22,7 +22,13 @@ const feedbackSchema = z.object({
 
 type FeedbackFormValues = z.infer<typeof feedbackSchema>;
 
-export function FeedbackForm({ onSubmitted }: { onSubmitted: (feedback: FeedbackUser | FeedbackAdmin) => void }) {
+export function FeedbackForm({
+  onSubmitted,
+  placeholder = "Share a review, report an issue with your stay or listing, or tell us how we're doing...",
+}: {
+  onSubmitted: (feedback: FeedbackUser | FeedbackAdmin) => void;
+  placeholder?: string;
+}) {
   const [files, setFiles] = useState<File[]>([]);
   const submitMutation = useSubmitFeedbackMutation();
   const uploadMutation = useUploadAttachmentsMutation();
@@ -65,12 +71,7 @@ export function FeedbackForm({ onSubmitted }: { onSubmitted: (feedback: Feedback
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="raw_text">What&apos;s on your mind?</Label>
-        <Textarea
-          id="raw_text"
-          rows={8}
-          placeholder="Share a review, report an issue with your stay or listing, or tell us how we're doing..."
-          {...register("raw_text")}
-        />
+        <Textarea id="raw_text" rows={8} placeholder={placeholder} {...register("raw_text")} />
         {errors.raw_text && (
           <p className="text-sm text-destructive" role="alert">
             {errors.raw_text.message}

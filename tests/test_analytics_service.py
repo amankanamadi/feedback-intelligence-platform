@@ -287,6 +287,28 @@ def test_get_notable_feedback_filters_by_priority(db_session):
     assert notable[0].raw_text == "urgent"
 
 
+def test_get_notable_feedback_filters_by_main_category(db_session):
+    # Same sentiment, different main_category - main_category alone must
+    # decide who survives the filter, since this is exactly what the
+    # weekly report's positive_highlights relies on to avoid surfacing a
+    # mistagged-Positive Support Ticket as a "win."
+    _seed_classified(
+        db_session, "glowing review", MainCategory.GUEST_REVIEW, Sentiment.POSITIVE, Priority.LOW, 90, [],
+    )
+    _seed_classified(
+        db_session, "positive-toned feature request", MainCategory.SUPPORT_TICKET, Sentiment.POSITIVE, Priority.LOW, 90, [],
+        sub_category=SubCategory.FEATURE_REQUESTS,
+    )
+
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    notable = get_notable_feedback(
+        db_session, since=since, sentiment=Sentiment.POSITIVE, main_category=MainCategory.GUEST_REVIEW
+    )
+
+    assert len(notable) == 1
+    assert notable[0].raw_text == "glowing review"
+
+
 def test_guest_satisfaction_score_reflects_positive_guest_review_share(db_session):
     _seed_classified(db_session, "great stay", MainCategory.GUEST_REVIEW, Sentiment.POSITIVE, Priority.LOW, 90, [])
     _seed_classified(db_session, "bad stay", MainCategory.GUEST_REVIEW, Sentiment.NEGATIVE, Priority.HIGH, 90, [])

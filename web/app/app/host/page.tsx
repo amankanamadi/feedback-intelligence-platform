@@ -14,13 +14,16 @@ import { RespondDialog } from "@/components/host/RespondDialog";
 import { useHostProperties } from "@/hooks/use-host-properties";
 import { useHostPerformance } from "@/hooks/use-host-performance";
 import { useHostQueue } from "@/hooks/use-host-queue";
-import { Home, Inbox } from "lucide-react";
+import { useHostReviews } from "@/hooks/use-host-reviews";
+import { formatDate } from "@/lib/format";
+import { Home, Inbox, MessageSquareHeart, Star } from "lucide-react";
 
 export default function HostDashboardPage() {
   const propertiesQuery = useHostProperties();
   const performanceQuery = useHostPerformance();
   const [unresolvedOnly, setUnresolvedOnly] = useState(true);
   const queueQuery = useHostQueue(undefined, unresolvedOnly);
+  const reviewsQuery = useHostReviews();
 
   return (
     <div className="flex flex-col gap-6">
@@ -149,6 +152,57 @@ export default function HostDashboardPage() {
                     <TableCell>
                       <RespondDialog feedback={item} />
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DataState>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-foreground">Recent guest reviews</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          What guests said after their stay - informational only, no response needed.
+        </p>
+        <DataState
+          query={reviewsQuery}
+          skeleton={<TableSkeleton rows={3} />}
+          empty={(data) => data.length === 0}
+          emptyState={
+            <EmptyState
+              icon={<MessageSquareHeart className="size-10" aria-hidden="true" />}
+              title="No reviews yet"
+              description="Guest reviews of your properties will show up here after their stay."
+            />
+          }
+        >
+          {(items) => (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Property</TableHead>
+                  <TableHead>Rating</TableHead>
+                  <TableHead>Review</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-foreground">{item.property_name ?? "—"}</TableCell>
+                    <TableCell>
+                      {item.overall_rating != null ? (
+                        <span className="flex items-center gap-1 text-foreground">
+                          <Star className="size-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+                          {item.overall_rating}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-md truncate text-muted-foreground">{item.raw_text}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(item.created_at)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

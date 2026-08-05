@@ -79,6 +79,31 @@ def test_weekly_report_reflects_seeded_data(admin_client, db_session, mock_narra
     assert body["positive_highlights"][0]["raw_text"] == "Loving this listing, the host was amazing!"
 
 
+def test_weekly_report_excludes_positive_non_review_from_highlights(admin_client, db_session, mock_narrative):
+    """Regression check: a Support Ticket that got mistagged Positive
+    sentiment (e.g. a politely-worded feature request born from a
+    frustrating cancellation) must never surface as a "positive
+    highlight" - only genuine Guest Review wins should."""
+    mistagged = crud.create_feedback(db_session, raw_text="No easy way to message the host after cancelling.")
+    crud.apply_classification(
+        db_session,
+        mistagged,
+        main_category=MainCategory.SUPPORT_TICKET,
+        sub_category=SubCategory.FEATURE_REQUESTS,
+        sentiment=Sentiment.POSITIVE,
+        priority=Priority.LOW,
+        confidence=80,
+        summary="Guest suggests a communication feature after a cancellation.",
+        theme_names=["Feature Request"],
+        recommended_action="Log with product team.",
+    )
+
+    response = admin_client.get("/reports/weekly")
+
+    assert response.status_code == 200
+    assert response.json()["positive_highlights"] == []
+
+
 def test_weekly_report_degrades_gracefully_when_narrative_fails(admin_client, mock_narrative):
     mock_narrative.side_effect = RuntimeError("OpenAI is down")
 

@@ -493,6 +493,7 @@ def get_notable_feedback(
     *,
     priority_in: list[Priority] | None = None,
     sentiment: Sentiment | None = None,
+    main_category: MainCategory | None = None,
     limit: int = 5,
 ) -> list[Feedback]:
     stmt = select(Feedback).where(Feedback.created_at >= since)
@@ -500,5 +501,7 @@ def get_notable_feedback(
         stmt = stmt.where(Feedback.priority.in_(priority_in))
     if sentiment is not None:
         stmt = stmt.where(Feedback.sentiment == sentiment)
+    if main_category is not None:
+        stmt = stmt.where(Feedback.main_category == main_category)
     stmt = stmt.order_by(Feedback.created_at.desc()).limit(limit)
     return list(db.scalars(stmt))

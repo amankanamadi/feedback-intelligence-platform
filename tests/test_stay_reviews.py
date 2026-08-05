@@ -1,7 +1,19 @@
 from datetime import date
 
+from sqlalchemy import select
+
 from app.ai.schemas import FeedbackClassification
-from app.database.models import Booking, BookingStatus, MainCategory, Priority, Property, PropertyType, Sentiment, SubCategory
+from app.database.models import (
+    Booking,
+    BookingStatus,
+    MainCategory,
+    Notification,
+    Priority,
+    Property,
+    PropertyType,
+    Sentiment,
+    SubCategory,
+)
 
 FULL_RATINGS = {
     "overall_rating": 4,
@@ -202,6 +214,53 @@ def test_property_average_rating_reflects_only_guest_ratings(user_client, mock_a
     matching = [p for p in response.json() if p["id"] == property_row.id]
     assert len(matching) == 1
     assert matching[0]["average_rating"] == 4.0  # (5 + 3) / 2, unaffected by the un-rated complaint
+
+
+def test_stay_review_notifies_the_property_host(user_client, host_client, mock_ai, db_session):
+    guest = user_client.get("/auth/me").json()
+    host = host_client.get("/auth/me").json()
+    property_row = _seed_property(db_session, host_id=host["id"])
+    booking = _seed_booking(db_session, guest_id=guest["id"], property_id=property_row.id)
+
+    response = user_client.post(
+        "/feedback", json={"raw_text": "Loved this place!", "booking_id": booking.id, **FULL_RATINGS}
+    )
+
+    assert response.status_code == 201
+    notifications = list(db_session.scalars(select(Notification).where(Notification.user_id == host["id"])))
+    assert len(notifications) == 1
+    assert property_row.name in notifications[0].message
+    assert notifications[0].link == "/app/host"
+
+
+def test_stay_review_for_hostless_property_creates_no_notification(user_client, mock_ai, db_session):
+    guest = user_client.get("/auth/me").json()
+    property_row = _seed_property(db_session)  # no host_id
+    booking = _seed_booking(db_session, guest_id=guest["id"], property_id=property_row.id)
+
+    response = user_client.post(
+        "/feedback", json={"raw_text": "Loved this place!", "booking_id": booking.id, **FULL_RATINGS}
+    )
+
+    assert response.status_code == 201
+    assert list(db_session.scalars(select(Notification))) == []
+
+
+def test_plain_complaint_does_not_notify_the_host(user_client, host_client, mock_ai, db_session):
+    """A booking-tied complaint (no ratings) is a real case a host may need
+    to act on via the complaint queue/notifications-from-PATCH flow - it
+    must not also fire the review-only notification."""
+    guest = user_client.get("/auth/me").json()
+    host = host_client.get("/auth/me").json()
+    property_row = _seed_property(db_session, host_id=host["id"])
+    booking = _seed_booking(db_session, guest_id=guest["id"], property_id=property_row.id)
+
+    response = user_client.post(
+        "/feedback", json={"raw_text": "The WiFi didn't work the whole stay.", "booking_id": booking.id}
+    )
+
+    assert response.status_code == 201
+    assert list(db_session.scalars(select(Notification).where(Notification.user_id == host["id"]))) == []
 
 
 def test_plain_feedback_without_ratings_still_works(user_client, mock_ai):

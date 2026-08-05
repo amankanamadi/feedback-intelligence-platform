@@ -8,7 +8,7 @@ from app.ai.weekly_report import generate_weekly_narrative
 from app.analytics.schemas import WeeklyReportResponse
 from app.analytics.service import get_analytics_summary, get_notable_feedback
 from app.core.security import RequireStaff
-from app.database.models import Priority, Sentiment, User
+from app.database.models import MainCategory, Priority, Sentiment, User
 from app.database.session import get_db
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,16 @@ def weekly_report(current_user: User = Depends(RequireStaff), db: Session = Depe
     top_concerns = get_notable_feedback(
         db, since=period_start, priority_in=[Priority.HIGH, Priority.CRITICAL], limit=5
     )
+    # Scoped to Guest Review on top of sentiment=Positive - a "positive
+    # highlight" is meant to be a genuine win worth celebrating (a glowing
+    # review, host praise), not a Support Ticket/Host Complaint that
+    # merely got mistagged Positive despite describing a real friction
+    # point (e.g. a politely-worded feature request born from a
+    # frustrating cancellation). This is the deterministic backstop;
+    # app/ai/classification.py's sentiment guidance is the other half of
+    # this fix, for the underlying tagging accuracy.
     positive_highlights = get_notable_feedback(
-        db, since=period_start, sentiment=Sentiment.POSITIVE, limit=3
+        db, since=period_start, sentiment=Sentiment.POSITIVE, main_category=MainCategory.GUEST_REVIEW, limit=3
     )
 
     try:

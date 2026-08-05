@@ -274,6 +274,25 @@ def _process_feedback_submission(
         except Exception:
             logger.exception("Duplicate-link storage failed for feedback %s", feedback.id)
 
+    # A stay review is informational for the host, not a case to work -
+    # no admin_response/decision workflow applies to it (see the
+    # is_review branch above), so a one-way notification is the entire
+    # "the host finds out" mechanism. Gated on is_review directly (not the
+    # final main_category) so this never depends on whether classification
+    # itself succeeded.
+    if is_review and property_id is not None:
+        try:
+            property_ = crud.get_property(db, property_id)
+            if property_ is not None and property_.host_id is not None:
+                crud.create_notification(
+                    db,
+                    user_id=property_.host_id,
+                    message=f"New guest review for {property_.name}.",
+                    link="/app/host",
+                )
+        except Exception:
+            logger.exception("Host review notification failed for feedback %s", feedback.id)
+
     return feedback
 
 
@@ -404,6 +423,22 @@ def list_host_complaint_queue(
     items = crud.list_feedback_for_host(
         db, current_user.id, skip=skip, limit=limit, status=status_, unresolved=unresolved
     )
+    return [_shape_host_feedback(item) for item in items]
+
+
+@router.get("/feedback/host-reviews", response_model=None)
+def list_host_reviews(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    current_user: User = Depends(require_role(Role.HOST)),
+    db: Session = Depends(get_db),
+) -> list[FeedbackHostRead]:
+    # Same route-ordering requirement as /feedback/host-queue above - must
+    # stay defined before GET /feedback/{feedback_id}. Read-only: a host
+    # can see what guests wrote about their listings, but there's no
+    # reply/decision workflow here, unlike the complaint queue - see
+    # crud.list_reviews_for_host's docstring.
+    items = crud.list_reviews_for_host(db, current_user.id, skip=skip, limit=limit)
     return [_shape_host_feedback(item) for item in items]
 
 

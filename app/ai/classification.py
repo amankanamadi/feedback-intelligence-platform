@@ -53,6 +53,14 @@ Sentiment guidance for tricky cases:
   complaint).
 - Do not let surface-level positive or negative words override the actual
   meaning and context of the message.
+- Polite phrasing is not positive sentiment: a feature request or
+  suggestion that only exists because something went wrong or was
+  missing (e.g. "there's no way to do X", "it would help if Y existed")
+  is Neutral or Negative depending on how much frustration is expressed
+  - never Positive, even when the guest's tone is constructive or
+  courteous rather than angry. Reserve Positive for feedback that
+  expresses actual satisfaction with something that happened, not calm
+  wording about something that didn't.
 """ + PROMPT_INJECTION_GUARD
 
 

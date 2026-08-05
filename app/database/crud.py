@@ -350,6 +350,27 @@ def list_feedback_for_host(
     return list(db.scalars(stmt))
 
 
+def list_reviews_for_host(db: Session, host_id: int, *, skip: int = 0, limit: int = 100) -> list[Feedback]:
+    """Guest reviews left for this host's properties - a read-only,
+    informational counterpart to list_feedback_for_host's actionable
+    queue. Reviews never carry a responsible_team (routing only ever
+    applies to Host Complaint/Support Ticket), so they'd never show up in
+    the queue above - this is the host's own separate view of them, with
+    no reply/decision workflow attached: a host can read a review about
+    their listing, they're never required to act on one.
+    """
+    stmt = (
+        select(Feedback)
+        .join(Property, Feedback.property_id == Property.id)
+        .where(Property.host_id == host_id)
+        .where(Feedback.main_category == MainCategory.GUEST_REVIEW)
+        .order_by(Feedback.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    return list(db.scalars(stmt))
+
+
 def flag_overdue_sla_breaches(db: Session) -> int:
     """Bulk-flips sla_breached for any row whose sla_due_at has passed and
     isn't already flagged/resolved/closed. No scheduler exists in this

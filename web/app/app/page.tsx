@@ -20,18 +20,20 @@ export default function AppHomePage() {
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <MessageSquarePlus className="size-8 text-primary" aria-hidden="true" />
-            <CardTitle>Submit new feedback</CardTitle>
-            <CardDescription>Share a review, report an issue, or tell us how we&apos;re doing.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <Link href="/app/feedback/new">Submit feedback</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        {!isStaff && (
+          <Card>
+            <CardHeader>
+              <MessageSquarePlus className="size-8 text-primary" aria-hidden="true" />
+              <CardTitle>Submit new feedback</CardTitle>
+              <CardDescription>Share a review, report an issue, or tell us how we&apos;re doing.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <Link href="/app/feedback/new">Submit feedback</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader>
             <MessageSquareHeart className="size-8 text-primary" aria-hidden="true" />
