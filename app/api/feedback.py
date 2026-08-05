@@ -179,6 +179,16 @@ def _process_feedback_submission(
     # already guarantees all-or-nothing.
     is_review = payload.cleanliness_rating is not None
     booking = _validate_booking(db, payload.booking_id, is_review=is_review, current_user=current_user)
+    # A guest can only ever reference a property through a real booking -
+    # never a free-standing property_id with no booking to back it up.
+    # This is guest-specific: a host reporting a maintenance issue on
+    # their own property has no "booking" of their own to reference (only
+    # guests have bookings), so this is never enforced for a host.
+    if current_user.role == Role.GUEST and payload.property_id is not None and booking is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Look up your booking first - a property can only be referenced through a real stay.",
+        )
     # A review's property always matches its booking, regardless of
     # whatever property_id the client sent - the booking is authoritative.
     property_id = booking.property_id if booking is not None else payload.property_id

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { AttachmentUploader } from "@/components/feedback/AttachmentUploader";
 import { useSubmitFeedbackMutation, useUploadAttachmentsMutation } from "@/hooks/use-submit-feedback";
 import { useProperties } from "@/hooks/use-properties";
+import { useIsGuest } from "@/hooks/use-is-guest";
 import { detectClientContext } from "@/lib/client-context";
 import { isApiError } from "@/lib/auth";
 import type { FeedbackAdmin, FeedbackUser } from "@/types/feedback";
@@ -33,6 +35,7 @@ export function FeedbackForm({
   const submitMutation = useSubmitFeedbackMutation();
   const uploadMutation = useUploadAttachmentsMutation();
   const propertiesQuery = useProperties();
+  const isGuest = useIsGuest();
 
   const {
     register,
@@ -79,21 +82,36 @@ export function FeedbackForm({
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="property_id">Which listing is this about? (optional)</Label>
-        <select
-          id="property_id"
-          {...register("property_id")}
-          className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
-        >
-          <option value="">Not tied to a specific listing</option>
-          {propertiesQuery.data?.map((property) => (
-            <option key={property.id} value={property.id}>
-              {property.name} — {property.city}, {property.country}
-            </option>
-          ))}
-        </select>
-      </div>
+      {isGuest ? (
+        // A guest can only ever reference a property through a real
+        // booking (enforced server-side too) - point them at the
+        // booking-lookup flow instead of offering a free listing picker
+        // here, which would let them tag a property they never actually
+        // stayed at.
+        <p className="text-sm text-muted-foreground">
+          Want to report something about a specific stay?{" "}
+          <Link href="/app/checkout-feedback/new" className="text-primary hover:underline">
+            Look up your booking
+          </Link>{" "}
+          instead.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="property_id">Which listing is this about? (optional)</Label>
+          <select
+            id="property_id"
+            {...register("property_id")}
+            className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+          >
+            <option value="">Not tied to a specific listing</option>
+            {propertiesQuery.data?.map((property) => (
+              <option key={property.id} value={property.id}>
+                {property.name} — {property.city}, {property.country}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <AttachmentUploader files={files} onChange={setFiles} />
 

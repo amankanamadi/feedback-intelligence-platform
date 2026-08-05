@@ -38,7 +38,7 @@ export function SubmissionSuccess({
         <div className="flex gap-3">
           <Button asChild className="flex-1">
             {feedback.overall_rating != null ? (
-              <Link href="/app/reviews">View my reviews</Link>
+              <Link href="/app/checkout-feedback">View checkout feedback</Link>
             ) : (
               <Link href={`/app/feedback/${feedback.id}`}>View submitted feedback</Link>
             )}

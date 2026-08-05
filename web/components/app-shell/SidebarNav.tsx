@@ -64,7 +64,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Guest",
     guestOnly: true,
     items: [
-      { href: "/app/reviews", label: "My Reviews", icon: MessageSquareHeart },
+      { href: "/app/checkout-feedback", label: "Checkout Feedback", icon: MessageSquareHeart },
       { href: "/app/wishlist", label: "My Wishlist", icon: Heart },
     ],
   },

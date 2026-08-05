@@ -291,7 +291,8 @@ def seed_bookings(db, guest_ids: list[int], property_ids: list[int], today: date
 # --- 4. Feedback: reviews + complaints/tickets through the real pipeline ----
 
 REVIEW_RATING_FIELDS = [
-    "cleanliness_rating", "communication_rating", "checkin_rating", "location_rating", "value_rating",
+    "cleanliness_rating", "housekeeping_rating", "amenities_rating",
+    "communication_rating", "checkin_rating", "location_rating", "value_rating",
 ]
 
 
@@ -361,12 +362,13 @@ def seed_feedback(
         guest_client = guest_clients[booking.guest_id]
 
         if random.random() < 0.85:
-            overall = _random_rating()
+            # overall_rating is never client-supplied - the backend
+            # derives it as the rounded mean of these seven categories.
+            overall_seed = _random_rating()
             payload = {
                 "raw_text": next(text_iter),
                 "booking_id": booking.id,
-                "overall_rating": overall,
-                **{field: _jittered_rating(overall) for field in REVIEW_RATING_FIELDS},
+                **{field: _jittered_rating(overall_seed) for field in REVIEW_RATING_FIELDS},
                 **_metadata_for(FeedbackSource.POST_STAY_SURVEY),
             }
             response = guest_client.post("/feedback", json=payload)
@@ -395,15 +397,34 @@ def seed_feedback(
     # General submissions, not tied to any booking - app issues, feature
     # requests, payments/refunds, and property-scoped complaints - spread
     # across all guest and host accounts so every account has some
-    # activity, not just guest.demo/host.demo.
+    # activity, not just guest.demo/host.demo. A guest can only ever
+    # reference a property through one of their own real bookings (the
+    # backend rejects a guest-submitted property_id with no booking_id);
+    # a host has no "booking" of their own, so they still get the direct
+    # property_id tag.
     property_ids = [p.id for p in db.scalars(select(Property))]
-    all_submitter_clients = list(guest_clients.values()) + list(host_clients.values())
+    bookings_by_guest: dict[int, list[int]] = {}
+    for b in bookings:
+        bookings_by_guest.setdefault(b.guest_id, []).append(b.id)
+
+    guest_items = list(guest_clients.items())
+    host_items = list(host_clients.items())
+    guest_share = len(guest_items) / (len(guest_items) + len(host_items))
     general_target = 90
     for _ in range(general_target):
-        client = random.choice(all_submitter_clients)
+        if random.random() < guest_share:
+            guest_id, client = random.choice(guest_items)
+        else:
+            guest_id, client = None, random.choice(host_items)[1]
+
         metadata = _metadata_for(random.choice(list(FeedbackSource)))
-        if property_ids and random.random() < 0.6:
-            metadata["property_id"] = random.choice(property_ids)
+        if random.random() < 0.6:
+            if guest_id is not None and bookings_by_guest.get(guest_id):
+                metadata["booking_id"] = random.choice(bookings_by_guest[guest_id])
+            elif guest_id is None and property_ids:
+                metadata["property_id"] = random.choice(property_ids)
+            # A guest with no bookings at all simply goes untagged this
+            # round rather than violating the booking_id requirement.
         payload = {"raw_text": next(text_iter), **metadata}
         response = client.post("/feedback", json=payload)
         if response.status_code < 400:

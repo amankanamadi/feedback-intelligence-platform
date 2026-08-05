@@ -38,26 +38,26 @@ function Stars({ value, size = "size-4" }: { value: number; size?: string }) {
   );
 }
 
-function ReviewCard({ review }: { review: FeedbackUser }) {
+function CheckoutFeedbackCard({ feedback }: { feedback: FeedbackUser }) {
   return (
     <Card>
       <CardHeader className="flex-row items-start justify-between space-y-0">
         <div>
-          <CardTitle className="text-base">{review.property_name ?? "General feedback"}</CardTitle>
-          <p className="text-xs text-muted-foreground">{formatDate(review.created_at)}</p>
+          <CardTitle className="text-base">{feedback.property_name ?? "General feedback"}</CardTitle>
+          <p className="text-xs text-muted-foreground">{formatDate(feedback.created_at)}</p>
         </div>
-        {review.overall_rating != null && (
+        {feedback.overall_rating != null && (
           <div className="flex items-center gap-2">
-            <Stars value={review.overall_rating} size="size-5" />
-            <span className="text-sm font-medium text-foreground">{review.overall_rating}/5</span>
+            <Stars value={feedback.overall_rating} size="size-5" />
+            <span className="text-sm font-medium text-foreground">{feedback.overall_rating}/5</span>
           </div>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-sm text-foreground">{review.raw_text}</p>
+        <p className="text-sm text-foreground">{feedback.raw_text}</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
           {(Object.keys(CATEGORY_LABELS) as CategoryKey[]).map((key) => {
-            const value = review[key];
+            const value = feedback[key];
             if (value == null) return null;
             return (
               <div key={key} className="flex items-center justify-between gap-2 text-sm">
@@ -72,18 +72,18 @@ function ReviewCard({ review }: { review: FeedbackUser }) {
   );
 }
 
-export default function MyReviewsPage() {
+export default function CheckoutFeedbackPage() {
   const query = useFeedbackList({ main_category: "Guest Review" });
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">My Reviews</h1>
-          <p className="text-muted-foreground">Reviews you&apos;ve left after checking out of a stay.</p>
+          <h1 className="text-2xl font-semibold text-foreground">Checkout Feedback</h1>
+          <p className="text-muted-foreground">Feedback you&apos;ve left after checking out of a stay.</p>
         </div>
         <Button asChild size="sm">
-          <Link href="/app/reviews/new">Leave a review</Link>
+          <Link href="/app/checkout-feedback/new">Leave checkout feedback</Link>
         </Button>
       </div>
 
@@ -94,11 +94,11 @@ export default function MyReviewsPage() {
         emptyState={
           <EmptyState
             icon={<MessageSquareHeart className="size-10" aria-hidden="true" />}
-            title="No reviews yet"
+            title="No checkout feedback yet"
             description="Once you check out of a completed stay, you can rate it here."
             action={
               <Button asChild size="sm">
-                <Link href="/app/reviews/new">Leave a review</Link>
+                <Link href="/app/checkout-feedback/new">Leave checkout feedback</Link>
               </Button>
             }
           />
@@ -106,8 +106,8 @@ export default function MyReviewsPage() {
       >
         {(items) => (
           <div className="flex flex-col gap-4">
-            {(items as FeedbackUser[]).map((review) => (
-              <ReviewCard key={review.id} review={review} />
+            {(items as FeedbackUser[]).map((feedback) => (
+              <CheckoutFeedbackCard key={feedback.id} feedback={feedback} />
             ))}
           </div>
         )}

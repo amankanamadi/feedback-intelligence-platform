@@ -154,8 +154,11 @@ def test_list_properties_unknown_host_id_returns_empty(user_client, db_session):
     assert response.json() == []
 
 
-def test_submit_feedback_with_invalid_property_id_returns_404(user_client, mock_ai):
-    response = user_client.post(
+def test_submit_feedback_with_invalid_property_id_returns_404(host_client, mock_ai):
+    # host_client, not user_client: a guest can only reference a property
+    # through a real booking (see tests/test_stay_reviews.py), so this
+    # property_id-only shape is only valid for a host.
+    response = host_client.post(
         "/feedback", json={"raw_text": "Feedback about a property that doesn't exist.", "property_id": 999999}
     )
 
@@ -163,10 +166,10 @@ def test_submit_feedback_with_invalid_property_id_returns_404(user_client, mock_
     mock_ai["classify"].assert_not_called()
 
 
-def test_submit_feedback_with_valid_property_id_succeeds(user_client, db_session, mock_ai):
+def test_submit_feedback_with_valid_property_id_succeeds(host_client, db_session, mock_ai):
     (property_row,) = _seed_properties(db_session)[:1]
 
-    response = user_client.post(
+    response = host_client.post(
         "/feedback", json={"raw_text": "Loved staying at this listing!", "property_id": property_row.id}
     )
 

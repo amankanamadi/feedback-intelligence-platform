@@ -48,7 +48,7 @@ const HOST_ONLY_SEGMENTS = ["/app/host"];
 // Same rationale, for the one guest-only page. /app/properties is
 // deliberately NOT in any of these arrays - browsing listings is open to
 // every role, matching GET /properties's own design.
-const GUEST_ONLY_SEGMENTS = ["/app/wishlist", "/app/reviews"];
+const GUEST_ONLY_SEGMENTS = ["/app/wishlist", "/app/checkout-feedback"];
 
 // Operations Queue is for MANAGE_ROLES specifically (Support/Ops
 // Manager) - Product Manager/Exec/Trust & Safety already fall out via

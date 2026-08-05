@@ -9,10 +9,11 @@ import type { FeedbackAdmin, FeedbackUser } from "@/types/feedback";
 const HOST_PLACEHOLDER =
   "Tell us about a recent guest, or share feedback about operations, the app, or our team...";
 
-// Leaving a review after a stay lives entirely on its own dedicated flow
-// now (/app/reviews/new, linked from the "My Reviews" dashboard) - this
-// page is general feedback only, for everyone, so there's no tab/branch
-// left to choose between "general" and "about a specific stay" here.
+// Checkout feedback after a stay lives entirely on its own dedicated flow
+// now (/app/checkout-feedback/new, linked from the Checkout Feedback
+// dashboard) - this page is general feedback only, for everyone, so
+// there's no tab/branch left to choose between "general" and "about a
+// specific stay" here.
 export default function NewFeedbackPage() {
   const [submitted, setSubmitted] = useState<FeedbackUser | FeedbackAdmin | null>(null);
   const isHost = useIsHost();

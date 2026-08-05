@@ -320,3 +320,72 @@ def test_plain_feedback_without_ratings_still_works(user_client, mock_ai):
     body = response.json()
     assert body["booking_id"] is None
     assert body["overall_rating"] is None
+
+
+def test_guest_property_id_without_booking_is_rejected(user_client, mock_ai, db_session):
+    """A guest can only ever reference a property through a real booking -
+    a free-standing property_id (no stay to back it up) must be rejected,
+    not silently accepted like a host's own property-maintenance report."""
+    property_row = _seed_property(db_session)
+
+    response = user_client.post(
+        "/feedback", json={"raw_text": "This listing needs work.", "property_id": property_row.id}
+    )
+
+    assert response.status_code == 422
+    mock_ai["classify"].assert_not_called()
+
+
+def test_guest_property_id_with_booking_is_accepted(user_client, mock_ai, db_session):
+    me = user_client.get("/auth/me").json()
+    property_row = _seed_property(db_session)
+    booking = _seed_booking(db_session, guest_id=me["id"], property_id=property_row.id)
+
+    response = user_client.post(
+        "/feedback",
+        json={
+            "raw_text": "The WiFi didn't work the whole stay.",
+            "booking_id": booking.id,
+            "property_id": 999999,  # bogus - the booking's own property must win regardless
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["property_id"] == property_row.id
+
+
+def test_host_property_id_without_booking_is_still_allowed(host_client, mock_ai, db_session):
+    """Unlike a guest, a host has no booking of their own to reference -
+    reporting an issue on their own property with just property_id must
+    keep working exactly as before."""
+    property_row = _seed_property(db_session)
+
+    response = host_client.post(
+        "/feedback", json={"raw_text": "The pool needs draining.", "property_id": property_row.id}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["property_id"] == property_row.id
+
+
+def test_staff_property_id_without_booking_is_still_allowed(admin_client, mock_ai, db_session):
+    """The guest-only booking_id requirement must never apply to a staff
+    bulk-import caller (owner_user_id=None, no personal booking either)."""
+    property_row = _seed_property(db_session)
+
+    response = admin_client.post(
+        "/feedback", json={"raw_text": "Historical import item.", "property_id": property_row.id}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["property_id"] == property_row.id
+
+
+def test_guest_feedback_with_neither_property_nor_booking_still_works(user_client, mock_ai):
+    """A guest reporting something unrelated to any listing (e.g. an app
+    bug) never needs to reference a property at all - only an explicit
+    property_id with no booking is rejected."""
+    response = user_client.post("/feedback", json={"raw_text": "The app crashes when I open messages."})
+
+    assert response.status_code == 201
+    assert response.json()["property_id"] is None
