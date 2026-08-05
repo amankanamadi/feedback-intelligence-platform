@@ -77,9 +77,14 @@ export default function MyReviewsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">My Reviews</h1>
-        <p className="text-muted-foreground">Reviews you&apos;ve left after checking out of a stay.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">My Reviews</h1>
+          <p className="text-muted-foreground">Reviews you&apos;ve left after checking out of a stay.</p>
+        </div>
+        <Button asChild size="sm">
+          <Link href="/app/reviews/new">Leave a review</Link>
+        </Button>
       </div>
 
       <DataState
@@ -93,7 +98,7 @@ export default function MyReviewsPage() {
             description="Once you check out of a completed stay, you can rate it here."
             action={
               <Button asChild size="sm">
-                <Link href="/app/feedback/new">Submit a review</Link>
+                <Link href="/app/reviews/new">Leave a review</Link>
               </Button>
             }
           />
