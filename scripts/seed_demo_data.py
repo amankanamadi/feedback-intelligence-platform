@@ -78,16 +78,19 @@ from app.database.session import SessionLocal  # noqa: E402
 
 DEFAULT_BASE_URL = os.environ.get("API_BASE_URL", "http://127.0.0.1:8000")
 DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "Demo12345!")
-EMAIL_DOMAIN = "airbnb-gx.internal"
+EMAIL_DOMAIN = "demo.com"
 
 # --- 1. Accounts -----------------------------------------------------------
 
+# Short, sequential, easy-to-type logins (guest1@, host1@, ...) rather than
+# long role-qualified addresses - this is throwaway demo data meant to be
+# typed into a login form repeatedly, not realistic-looking production data.
 STAFF_DEMO_ACCOUNTS: list[tuple[str, str, Role]] = [
-    ("support.manager.demo", "Demo Support Manager", Role.SUPPORT_MANAGER),
-    ("ops.manager.demo", "Demo Ops Manager", Role.OPS_MANAGER),
-    ("product.manager.demo", "Demo Product Manager", Role.PRODUCT_MANAGER),
-    ("trust.safety.demo", "Demo Trust & Safety", Role.TRUST_SAFETY),
-    ("exec.demo", "Demo Exec", Role.EXEC),
+    ("support", "Demo Support Manager", Role.SUPPORT_MANAGER),
+    ("ops", "Demo Ops Manager", Role.OPS_MANAGER),
+    ("product", "Demo Product Manager", Role.PRODUCT_MANAGER),
+    ("trustsafety", "Demo Trust & Safety", Role.TRUST_SAFETY),
+    ("exec", "Demo Exec", Role.EXEC),
 ]
 
 GUEST_FIRST_NAMES = [
@@ -102,17 +105,17 @@ HOST_FULL_NAMES = [
 
 
 def guest_accounts() -> list[tuple[str, str, Role]]:
-    accounts = [(f"guest.demo@{EMAIL_DOMAIN}", "Demo Guest", Role.GUEST)]
-    for i, first_name in enumerate(GUEST_FIRST_NAMES[1:], start=2):
-        accounts.append((f"guest{i:02d}.demo@{EMAIL_DOMAIN}", f"{first_name} (Demo Guest)", Role.GUEST))
-    return accounts
+    return [
+        (f"guest{i}@{EMAIL_DOMAIN}", f"{first_name} (Demo Guest)", Role.GUEST)
+        for i, first_name in enumerate(GUEST_FIRST_NAMES, start=1)
+    ]
 
 
 def host_accounts() -> list[tuple[str, str, Role]]:
-    accounts = [(f"host.demo@{EMAIL_DOMAIN}", "Demo Host", Role.HOST)]
-    for i, full_name in enumerate(HOST_FULL_NAMES[1:], start=2):
-        accounts.append((f"host{i:02d}.demo@{EMAIL_DOMAIN}", full_name, Role.HOST))
-    return accounts
+    return [
+        (f"host{i}@{EMAIL_DOMAIN}", full_name, Role.HOST)
+        for i, full_name in enumerate(HOST_FULL_NAMES, start=1)
+    ]
 
 
 def all_accounts() -> list[tuple[str, str, Role]]:
@@ -397,7 +400,7 @@ def seed_feedback(
     # General submissions, not tied to any booking - app issues, feature
     # requests, payments/refunds, and property-scoped complaints - spread
     # across all guest and host accounts so every account has some
-    # activity, not just guest.demo/host.demo. A guest can only ever
+    # activity, not just guest1/host1. A guest can only ever
     # reference a property through one of their own real bookings (the
     # backend rejects a guest-submitted property_id with no booking_id);
     # a host has no "booking" of their own, so they still get the direct
@@ -488,8 +491,8 @@ def print_demo_credentials() -> None:
     print(f"\n=== Demo login credentials (password: {DEMO_PASSWORD} for all) ===")
     for local, _, role in STAFF_DEMO_ACCOUNTS:
         print(f"  {role.value:16s} {local}@{EMAIL_DOMAIN}")
-    print(f"  {'GUEST':16s} guest.demo@{EMAIL_DOMAIN}  (+ guest02..guest{len(GUEST_FIRST_NAMES):02d}.demo, same domain)")
-    print(f"  {'HOST':16s} host.demo@{EMAIL_DOMAIN}  (+ host02..host{len(HOST_FULL_NAMES):02d}.demo, same domain)")
+    print(f"  {'GUEST':16s} guest1@{EMAIL_DOMAIN} .. guest{len(GUEST_FIRST_NAMES)}@{EMAIL_DOMAIN}")
+    print(f"  {'HOST':16s} host1@{EMAIL_DOMAIN} .. host{len(HOST_FULL_NAMES)}@{EMAIL_DOMAIN}")
 
 
 def main() -> None:
@@ -516,7 +519,7 @@ def main() -> None:
         print("\nAuthenticating every demo account ...")
         guest_clients = {u.id: authenticated_client(args.base_url, u) for u in guest_users}
         host_clients = {u.id: authenticated_client(args.base_url, u) for u in host_users}
-        support_user = crud.get_user_by_email(db, f"support.manager.demo@{EMAIL_DOMAIN}")
+        support_user = crud.get_user_by_email(db, f"support@{EMAIL_DOMAIN}")
         support_client = authenticated_client(args.base_url, support_user)
 
         try:
