@@ -28,12 +28,15 @@ _METADATA_TEXT_FIELDS = (
     "platform",
 )
 
-# A "stay review" is any submission carrying rating(s) - all six are
-# required together (a partial review isn't meaningful), and always tied
-# to the completed booking being reviewed.
+# A "stay review" is any submission carrying rating(s) - all seven
+# real-life amenity/service categories are required together (a partial
+# review isn't meaningful), and always tied to the completed booking
+# being reviewed. `overall_rating` is deliberately NOT client-supplied -
+# see FeedbackCreate's docstring below - so it's never part of this set.
 _RATING_FIELDS = (
-    "overall_rating",
     "cleanliness_rating",
+    "housekeeping_rating",
+    "amenities_rating",
     "communication_rating",
     "checkin_rating",
     "location_rating",
@@ -65,9 +68,14 @@ class FeedbackCreate(BaseModel):
     # Stay review fields - present only for a Mandatory Stay Review
     # submission. `booking_id` is validated against the real Booking (and
     # its ownership + COMPLETED status) in the router, not here.
+    # `overall_rating` is deliberately absent here - a guest never sets it
+    # directly, the router derives it as the rounded mean of the seven
+    # category ratings below (see _RATING_FIELDS), so it can never
+    # disagree with its own components.
     booking_id: Optional[int] = None
-    overall_rating: Optional[int] = Field(None, ge=1, le=5)
     cleanliness_rating: Optional[int] = Field(None, ge=1, le=5)
+    housekeeping_rating: Optional[int] = Field(None, ge=1, le=5)
+    amenities_rating: Optional[int] = Field(None, ge=1, le=5)
     communication_rating: Optional[int] = Field(None, ge=1, le=5)
     checkin_rating: Optional[int] = Field(None, ge=1, le=5)
     location_rating: Optional[int] = Field(None, ge=1, le=5)
@@ -90,7 +98,7 @@ class FeedbackCreate(BaseModel):
         all_set = all(r is not None for r in ratings)
         if any_set and not all_set:
             raise ValueError(
-                "A stay review requires all six ratings: "
+                "A stay review requires all seven ratings: "
                 + ", ".join(_RATING_FIELDS)
             )
         if any_set and self.booking_id is None:
@@ -145,10 +153,14 @@ class FeedbackSubmitterRead(BaseModel):
     property_name: Optional[str] = None
     property_city: Optional[str] = None
     # A submitter always sees their own stay review's ratings - these are
-    # exactly what they entered, not an AI-analysis field.
+    # exactly what they entered (except overall_rating, which is the
+    # router's computed mean of the other seven, never a guest-entered
+    # value) - not an AI-analysis field.
     booking_id: Optional[int] = None
     overall_rating: Optional[int] = None
     cleanliness_rating: Optional[int] = None
+    housekeeping_rating: Optional[int] = None
+    amenities_rating: Optional[int] = None
     communication_rating: Optional[int] = None
     checkin_rating: Optional[int] = None
     location_rating: Optional[int] = None

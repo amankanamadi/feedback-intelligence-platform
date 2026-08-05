@@ -93,6 +93,29 @@ def _validate_property_id(db: Session, property_id: Optional[int]) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Property {property_id} not found")
 
 
+# The seven real-life amenity/service categories a stay review rates -
+# mirrors FeedbackCreate's own _RATING_FIELDS in app/api/schemas.py
+# (kept as a separate local tuple rather than importing that private
+# constant across modules).
+_CATEGORY_RATING_FIELDS = (
+    "cleanliness_rating",
+    "housekeeping_rating",
+    "amenities_rating",
+    "communication_rating",
+    "checkin_rating",
+    "location_rating",
+    "value_rating",
+)
+
+
+def _compute_overall_rating(payload: FeedbackCreate) -> int:
+    """overall_rating is never client-supplied (see FeedbackCreate's
+    docstring) - it's the rounded mean of the seven category ratings,
+    computed here so it can never disagree with its own components."""
+    values = [getattr(payload, field) for field in _CATEGORY_RATING_FIELDS]
+    return round(sum(values) / len(values))
+
+
 def _assert_can_submit_for_booking(booking: Booking, *, is_review: bool, current_user: User) -> None:
     """A booking's guest may always submit against it (review or
     complaint); staff may always act on behalf of anyone. A host may file
@@ -150,7 +173,11 @@ def _process_feedback_submission(
     raw feedback); the acknowledgement step never fails since it's a pure
     template lookup, not a network call.
     """
-    is_review = payload.overall_rating is not None
+    # overall_rating no longer exists on the payload (see
+    # _compute_overall_rating) - any one required category field is an
+    # equally valid review signal, since FeedbackCreate's validator
+    # already guarantees all-or-nothing.
+    is_review = payload.cleanliness_rating is not None
     booking = _validate_booking(db, payload.booking_id, is_review=is_review, current_user=current_user)
     # A review's property always matches its booking, regardless of
     # whatever property_id the client sent - the booking is authoritative.
@@ -171,8 +198,10 @@ def _process_feedback_submission(
         browser=payload.browser,
         platform=payload.platform,
         booking_id=payload.booking_id,
-        overall_rating=payload.overall_rating,
+        overall_rating=_compute_overall_rating(payload) if is_review else None,
         cleanliness_rating=payload.cleanliness_rating,
+        housekeeping_rating=payload.housekeeping_rating,
+        amenities_rating=payload.amenities_rating,
         communication_rating=payload.communication_rating,
         checkin_rating=payload.checkin_rating,
         location_rating=payload.location_rating,
@@ -442,6 +471,25 @@ def list_host_reviews(
     return [_shape_host_feedback(item) for item in items]
 
 
+@router.get("/feedback/property/{property_id}", response_model=None)
+def list_property_feedback_history(
+    property_id: int,
+    current_user: User = Depends(require_role(Role.HOST)),
+    db: Session = Depends(get_db),
+) -> list[FeedbackHostRead]:
+    # Two path segments after /feedback/ ("property", then the id), so
+    # this can never collide with GET /feedback/{feedback_id}'s single-
+    # segment shape regardless of registration order - unlike host-queue/
+    # host-reviews above, no ordering constraint applies here.
+    property_ = crud.get_property(db, property_id)
+    if property_ is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+    if property_.host_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    items = crud.list_feedback_for_property(db, property_id)
+    return [_shape_host_feedback(item) for item in items]
+
+
 @router.get("/feedback/{feedback_id}", response_model=None)
 def get_feedback(
     feedback_id: int,
@@ -455,7 +503,7 @@ def get_feedback(
     return _shape_feedback(feedback, current_user)
 
 
-_HOST_ALLOWED_PATCH_FIELDS = {"status", "admin_response"}
+_HOST_ALLOWED_PATCH_FIELDS = {"admin_response"}
 
 
 def _assert_can_patch_feedback(feedback: Feedback, *, updates: dict, current_user: User) -> None:
@@ -463,7 +511,10 @@ def _assert_can_patch_feedback(feedback: Feedback, *, updates: dict, current_use
     from before this phase); TRUST_SAFETY gets full access but only for
     items actually routed to them (they resolve their own bypass-queue
     items, not general power over everything); a property's host gets a
-    restricted subset (status/admin_response only) for their own routed
+    restricted subset (admin_response only - never status, which stays
+    with AI/admin: see update_feedback_admin_fields' automatic New/
+    Acknowledged -> In Progress bump on a response, which is the only way
+    a host's own reply moves the status at all) for their own routed
     items, and never for Trust & Safety items - that's the bypass, from
     the host's side.
     """

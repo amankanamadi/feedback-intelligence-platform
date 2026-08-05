@@ -17,10 +17,9 @@ import {
 } from "@/components/ui/dialog";
 import { useUpdateFeedbackMutation } from "@/hooks/use-update-feedback";
 import { isApiError } from "@/lib/auth";
-import { STATUS_OPTIONS, type FeedbackHostRead, type FeedbackStatus } from "@/types/feedback";
+import type { FeedbackHostRead } from "@/types/feedback";
 
 type RespondFormValues = {
-  status: FeedbackStatus;
   admin_response: string;
 };
 
@@ -29,19 +28,21 @@ export function RespondDialog({ feedback }: { feedback: FeedbackHostRead }) {
   const updateMutation = useUpdateFeedbackMutation(feedback.id);
 
   const { register, handleSubmit, reset } = useForm<RespondFormValues>({
-    defaultValues: { status: feedback.status, admin_response: feedback.admin_response ?? "" },
+    defaultValues: { admin_response: feedback.admin_response ?? "" },
   });
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (next) reset({ status: feedback.status, admin_response: feedback.admin_response ?? "" });
+    if (next) reset({ admin_response: feedback.admin_response ?? "" });
   };
 
   const onSubmit = (values: RespondFormValues) => {
-    // Only status/admin_response - a host's PATCH is restricted to these
-    // two fields server-side; sending anything else would 403.
+    // admin_response only - status isn't a host's call (it stays with
+    // AI/admin); the backend automatically advances New/Acknowledged to
+    // In Progress the moment a response is sent, so there's nothing for
+    // a host to pick here.
     updateMutation.mutate(
-      { status: values.status, admin_response: values.admin_response },
+      { admin_response: values.admin_response },
       {
         onSuccess: () => {
           toast.success("Response sent.");
@@ -67,23 +68,11 @@ export function RespondDialog({ feedback }: { feedback: FeedbackHostRead }) {
           </DialogHeader>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="status">Status</Label>
-            <select
-              id="status"
-              {...register("status")}
-              className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
-            >
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-2">
             <Label htmlFor="admin_response">Your response</Label>
             <Textarea id="admin_response" rows={5} {...register("admin_response")} />
+            <p className="text-xs text-muted-foreground">
+              Status updates automatically when you respond - it isn&apos;t something you set directly.
+            </p>
           </div>
 
           <DialogFooter>

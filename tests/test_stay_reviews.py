@@ -16,13 +16,18 @@ from app.database.models import (
 )
 
 FULL_RATINGS = {
-    "overall_rating": 4,
     "cleanliness_rating": 5,
+    "housekeeping_rating": 5,
+    "amenities_rating": 4,
     "communication_rating": 4,
     "checkin_rating": 3,
     "location_rating": 5,
     "value_rating": 4,
 }
+# Mean of FULL_RATINGS' seven values, rounded - overall_rating is never
+# client-supplied, it's always this computed value (see
+# app/api/feedback.py's _compute_overall_rating).
+FULL_RATINGS_OVERALL = round(sum(FULL_RATINGS.values()) / len(FULL_RATINGS))
 
 
 def _seed_property(db_session, **overrides) -> Property:
@@ -58,7 +63,7 @@ def _seed_booking(db_session, *, guest_id: int, property_id: int, **overrides) -
 def test_partial_ratings_rejected(user_client, mock_ai):
     response = user_client.post(
         "/feedback",
-        json={"raw_text": "Great stay overall.", "overall_rating": 5, "cleanliness_rating": 5},
+        json={"raw_text": "Great stay overall.", "cleanliness_rating": 5, "housekeeping_rating": 5},
     )
 
     assert response.status_code == 422
@@ -77,7 +82,7 @@ def test_rating_out_of_range_rejected(user_client, mock_ai, db_session):
     property_row = _seed_property(db_session)
     booking = _seed_booking(db_session, guest_id=me["id"], property_id=property_row.id)
 
-    bad_ratings = {**FULL_RATINGS, "overall_rating": 6}
+    bad_ratings = {**FULL_RATINGS, "housekeeping_rating": 6}
     response = user_client.post(
         "/feedback", json={"raw_text": "Great stay overall.", "booking_id": booking.id, **bad_ratings}
     )
@@ -161,6 +166,7 @@ def test_valid_stay_review_succeeds_and_forces_guest_review_category(
     assert body["property_id"] == property_row.id  # derived from the booking, not the bogus client value
     for field, value in FULL_RATINGS.items():
         assert body[field] == value
+    assert body["overall_rating"] == FULL_RATINGS_OVERALL  # server-computed, never client-supplied
 
     # main_category/sub_category are staff-only fields - check via the staff view.
     staff_view = admin_client.get(f"/feedback/{body['id']}").json()
@@ -197,13 +203,13 @@ def test_property_average_rating_reflects_only_guest_ratings(user_client, mock_a
         db_session, guest_id=me["id"], property_id=property_row.id, confirmation_code="ABNB-B"
     )
 
+    high_ratings = {field: 5 for field in FULL_RATINGS}
+    low_ratings = {field: 3 for field in FULL_RATINGS}
     user_client.post(
-        "/feedback",
-        json={"raw_text": "First stay, loved it.", "booking_id": booking_1.id, **{**FULL_RATINGS, "overall_rating": 5}},
+        "/feedback", json={"raw_text": "First stay, loved it.", "booking_id": booking_1.id, **high_ratings}
     )
     user_client.post(
-        "/feedback",
-        json={"raw_text": "Second stay, just okay.", "booking_id": booking_2.id, **{**FULL_RATINGS, "overall_rating": 3}},
+        "/feedback", json={"raw_text": "Second stay, just okay.", "booking_id": booking_2.id, **low_ratings}
     )
     # A plain complaint (no ratings) on the same property must never affect the average.
     user_client.post("/feedback", json={"raw_text": "Unrelated complaint, no ratings here."})
@@ -214,6 +220,48 @@ def test_property_average_rating_reflects_only_guest_ratings(user_client, mock_a
     matching = [p for p in response.json() if p["id"] == property_row.id]
     assert len(matching) == 1
     assert matching[0]["average_rating"] == 4.0  # (5 + 3) / 2, unaffected by the un-rated complaint
+
+
+def test_overall_rating_is_computed_as_rounded_mean_of_categories(user_client, mock_ai, db_session):
+    me = user_client.get("/auth/me").json()
+    property_row = _seed_property(db_session)
+    booking = _seed_booking(db_session, guest_id=me["id"], property_id=property_row.id)
+
+    # 5,5,4,4,3,5,4 -> mean 4.2857... -> rounds to 4.
+    ratings = {
+        "cleanliness_rating": 5,
+        "housekeeping_rating": 5,
+        "amenities_rating": 4,
+        "communication_rating": 4,
+        "checkin_rating": 3,
+        "location_rating": 5,
+        "value_rating": 4,
+    }
+
+    response = user_client.post(
+        "/feedback", json={"raw_text": "Mixed but good stay.", "booking_id": booking.id, **ratings}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["overall_rating"] == 4
+
+
+def test_client_supplied_overall_rating_is_silently_ignored(user_client, mock_ai, db_session):
+    """overall_rating isn't a real field on FeedbackCreate anymore - an
+    old client (or a malicious one) sending it must never let it leak
+    through as the stored value; the server's own computed mean always
+    wins."""
+    me = user_client.get("/auth/me").json()
+    property_row = _seed_property(db_session)
+    booking = _seed_booking(db_session, guest_id=me["id"], property_id=property_row.id)
+
+    response = user_client.post(
+        "/feedback",
+        json={"raw_text": "Great stay overall.", "booking_id": booking.id, "overall_rating": 1, **FULL_RATINGS},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["overall_rating"] == FULL_RATINGS_OVERALL
 
 
 def test_stay_review_notifies_the_property_host(user_client, host_client, mock_ai, db_session):

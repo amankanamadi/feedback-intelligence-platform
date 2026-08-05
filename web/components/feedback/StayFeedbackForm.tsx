@@ -25,9 +25,15 @@ const lookupSchema = z.object({
 
 type LookupFormValues = z.infer<typeof lookupSchema>;
 
+// Real-life amenity/service categories - matches every other hotel/
+// short-term-rental review flow. No "Overall" input here: the backend
+// computes overall_rating as the rounded mean of these seven, so asking
+// the guest to separately judge "overall" would just invite a value that
+// could disagree with its own components.
 const RATING_FIELDS = [
-  "overall_rating",
   "cleanliness_rating",
+  "housekeeping_rating",
+  "amenities_rating",
   "communication_rating",
   "checkin_rating",
   "location_rating",
@@ -37,8 +43,9 @@ const RATING_FIELDS = [
 type RatingKey = (typeof RATING_FIELDS)[number];
 
 const RATING_LABELS: Record<RatingKey, string> = {
-  overall_rating: "Overall",
   cleanliness_rating: "Cleanliness",
+  housekeeping_rating: "Housekeeping",
+  amenities_rating: "Amenities",
   communication_rating: "Communication",
   checkin_rating: "Check-in",
   location_rating: "Location",
@@ -52,8 +59,9 @@ export function StayFeedbackForm({
 }) {
   const [booking, setBooking] = useState<BookingRead | null>(null);
   const [ratings, setRatings] = useState<Record<RatingKey, number | null>>({
-    overall_rating: null,
     cleanliness_rating: null,
+    housekeeping_rating: null,
+    amenities_rating: null,
     communication_rating: null,
     checkin_rating: null,
     location_rating: null,
@@ -72,9 +80,6 @@ export function StayFeedbackForm({
     defaultValues: { confirmation_code: "" },
   });
 
-  // The backend only requires overall_rating to treat a submission as a
-  // review - this UI still asks for all 6 (better UX, matches how every
-  // historical review looks), it just isn't the backend's own signal.
   const isReviewEligible = booking?.status === "Completed";
   const allRatingsSet = RATING_FIELDS.every((key) => ratings[key] !== null);
 
@@ -90,7 +95,7 @@ export function StayFeedbackForm({
   const handleSubmitStay = async () => {
     if (!booking) return;
     if (isReviewEligible && !allRatingsSet) {
-      toast.error("Please rate all 5 categories plus overall.");
+      toast.error("Please rate all 7 categories.");
       return;
     }
     try {

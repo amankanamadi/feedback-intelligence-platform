@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -130,6 +131,7 @@ export default function HostDashboardPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Feedback</TableHead>
+                  <TableHead>Property</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Status</TableHead>
@@ -141,6 +143,15 @@ export default function HostDashboardPage() {
                 {items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="max-w-xs truncate">{item.raw_text}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.property_id ? (
+                        <Link href={`/app/properties/${item.property_id}`} className="hover:underline">
+                          {item.property_name ?? "—"}
+                        </Link>
+                      ) : (
+                        item.property_name ?? "—"
+                      )}
+                    </TableCell>
                     <TableCell>{item.sub_category ?? "—"}</TableCell>
                     <TableCell>{item.priority ? <PriorityBadge priority={item.priority} /> : "—"}</TableCell>
                     <TableCell>
@@ -190,7 +201,15 @@ export default function HostDashboardPage() {
               <TableBody>
                 {items.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="text-foreground">{item.property_name ?? "—"}</TableCell>
+                    <TableCell className="text-foreground">
+                      {item.property_id ? (
+                        <Link href={`/app/properties/${item.property_id}`} className="hover:underline">
+                          {item.property_name ?? "—"}
+                        </Link>
+                      ) : (
+                        item.property_name ?? "—"
+                      )}
+                    </TableCell>
                     <TableCell>
                       {item.overall_rating != null ? (
                         <span className="flex items-center gap-1 text-foreground">

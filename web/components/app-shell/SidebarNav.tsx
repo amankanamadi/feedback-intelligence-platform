@@ -9,6 +9,7 @@ import {
   Heart,
   Home,
   Inbox,
+  MessageSquareHeart,
   MessageSquarePlus,
   Settings,
   ShieldAlert,
@@ -62,7 +63,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Guest",
     guestOnly: true,
-    items: [{ href: "/app/wishlist", label: "My Wishlist", icon: Heart }],
+    items: [
+      { href: "/app/reviews", label: "My Reviews", icon: MessageSquareHeart },
+      { href: "/app/wishlist", label: "My Wishlist", icon: Heart },
+    ],
   },
   {
     label: "Host",

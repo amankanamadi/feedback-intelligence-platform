@@ -96,6 +96,8 @@ def create_feedback(
     booking_id: int | None = None,
     overall_rating: int | None = None,
     cleanliness_rating: int | None = None,
+    housekeeping_rating: int | None = None,
+    amenities_rating: int | None = None,
     communication_rating: int | None = None,
     checkin_rating: int | None = None,
     location_rating: int | None = None,
@@ -123,6 +125,8 @@ def create_feedback(
         booking_id=booking_id,
         overall_rating=overall_rating,
         cleanliness_rating=cleanliness_rating,
+        housekeeping_rating=housekeeping_rating,
+        amenities_rating=amenities_rating,
         communication_rating=communication_rating,
         checkin_rating=checkin_rating,
         location_rating=location_rating,
@@ -224,6 +228,17 @@ def update_feedback_admin_fields(
         # otherwise a guest who once rejected could never decide again
         # after a follow-up response (see apply_guest_decision).
         feedback.guest_decision = None
+        # A response is a real, mechanical signal that someone is actively
+        # working the case - auto-advance New/Acknowledged to In Progress
+        # when the caller didn't explicitly choose a status themselves.
+        # This is the automatic half of "status authority stays with AI
+        # or admin, not the host": a host can only ever send
+        # admin_response (never status - see _HOST_ALLOWED_PATCH_FIELDS
+        # in app/api/feedback.py), so this is the only way their response
+        # moves the status at all. Staff can still always override by
+        # sending status explicitly in the same request.
+        if status is None and feedback.status in (FeedbackStatus.NEW, FeedbackStatus.ACKNOWLEDGED):
+            feedback.status = FeedbackStatus.IN_PROGRESS
     if main_category is not None:
         feedback.main_category = main_category
     if responsible_team is not None:
@@ -347,6 +362,17 @@ def list_feedback_for_host(
     if unresolved:
         stmt = stmt.where(Feedback.status.not_in([FeedbackStatus.RESOLVED, FeedbackStatus.CLOSED]))
     stmt = stmt.offset(skip).limit(limit)
+    return list(db.scalars(stmt))
+
+
+def list_feedback_for_property(db: Session, property_id: int) -> list[Feedback]:
+    """Full feedback history for a single property - reviews and
+    complaints alike, the host-facing "properties tab" history view.
+    Authorization (that the caller actually owns this property) is the
+    route's job, not this function's - it's a plain, unscoped list by
+    design.
+    """
+    stmt = select(Feedback).where(Feedback.property_id == property_id).order_by(Feedback.created_at.desc())
     return list(db.scalars(stmt))
 
 

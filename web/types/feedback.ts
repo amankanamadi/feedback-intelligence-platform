@@ -85,8 +85,13 @@ export type FeedbackUser = {
   property_name: string | null;
   property_city: string | null;
   booking_id: number | null;
+  // overall_rating is server-computed (the rounded mean of the seven
+  // category ratings below) - never client-supplied, see
+  // FeedbackCreatePayload, which has no such field.
   overall_rating: number | null;
   cleanliness_rating: number | null;
+  housekeeping_rating: number | null;
+  amenities_rating: number | null;
   communication_rating: number | null;
   checkin_rating: number | null;
   location_rating: number | null;
@@ -161,8 +166,11 @@ export type FeedbackCreatePayload = {
   browser?: string;
   platform?: string;
   booking_id?: number;
-  overall_rating?: number;
+  // No overall_rating field - the backend computes it as the rounded
+  // mean of these seven; sending one would just be silently ignored.
   cleanliness_rating?: number;
+  housekeeping_rating?: number;
+  amenities_rating?: number;
   communication_rating?: number;
   checkin_rating?: number;
   location_rating?: number;

@@ -85,8 +85,9 @@ def test_guest_review_never_gets_a_responsible_team_or_sla_clock(admin_client, m
         json={
             "raw_text": "Lovely stay overall.",
             "booking_id": booking.id,
-            "overall_rating": 5,
             "cleanliness_rating": 5,
+            "housekeeping_rating": 5,
+            "amenities_rating": 5,
             "communication_rating": 5,
             "checkin_rating": 5,
             "location_rating": 5,

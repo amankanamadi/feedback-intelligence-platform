@@ -37,7 +37,11 @@ export function SubmissionSuccess({
         )}
         <div className="flex gap-3">
           <Button asChild className="flex-1">
-            <Link href={`/app/feedback/${feedback.id}`}>View submitted feedback</Link>
+            {feedback.overall_rating != null ? (
+              <Link href="/app/reviews">View my reviews</Link>
+            ) : (
+              <Link href={`/app/feedback/${feedback.id}`}>View submitted feedback</Link>
+            )}
           </Button>
           <Button variant="outline" className="flex-1" onClick={onSubmitAnother}>
             Submit another

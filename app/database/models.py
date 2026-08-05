@@ -194,8 +194,14 @@ class Feedback(Base):
     # app-layer-only validation convention). Only populated for
     # main_category == GUEST_REVIEW. The AI pipeline NEVER writes to these
     # columns - property/host ratings are computed only from guest input.
+    # `overall_rating` is never client-supplied - the router computes it
+    # as the rounded mean of the 7 category ratings below (real-life,
+    # per-amenity/service categories - not a separate guest judgment call
+    # that could disagree with its own components).
     overall_rating: Mapped[Optional[int]]
     cleanliness_rating: Mapped[Optional[int]]
+    housekeeping_rating: Mapped[Optional[int]]
+    amenities_rating: Mapped[Optional[int]]
     communication_rating: Mapped[Optional[int]]
     checkin_rating: Mapped[Optional[int]]
     location_rating: Mapped[Optional[int]]

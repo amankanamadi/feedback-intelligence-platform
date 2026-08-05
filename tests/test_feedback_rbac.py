@@ -16,6 +16,8 @@ SUBMITTER_FACING_FIELDS = {
     "booking_id",
     "overall_rating",
     "cleanliness_rating",
+    "housekeeping_rating",
+    "amenities_rating",
     "communication_rating",
     "checkin_rating",
     "location_rating",
