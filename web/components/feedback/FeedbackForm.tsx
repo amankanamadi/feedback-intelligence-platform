@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AttachmentUploader } from "@/components/feedback/AttachmentUploader";
+import { useBookingLookupMutation } from "@/hooks/use-booking-lookup";
 import { useSubmitFeedbackMutation, useUploadAttachmentsMutation } from "@/hooks/use-submit-feedback";
 import { useProperties } from "@/hooks/use-properties";
 import { useIsGuest } from "@/hooks/use-is-guest";
@@ -20,6 +21,7 @@ import type { FeedbackAdmin, FeedbackUser } from "@/types/feedback";
 const feedbackSchema = z.object({
   raw_text: z.string().min(1, "Please enter your feedback.").max(10_000, "Feedback is too long."),
   property_id: z.string().optional(),
+  confirmation_code: z.string().optional(),
 });
 
 type FeedbackFormValues = z.infer<typeof feedbackSchema>;
@@ -34,6 +36,7 @@ export function FeedbackForm({
   const [files, setFiles] = useState<File[]>([]);
   const submitMutation = useSubmitFeedbackMutation();
   const uploadMutation = useUploadAttachmentsMutation();
+  const lookupMutation = useBookingLookupMutation();
   const propertiesQuery = useProperties();
   const isGuest = useIsGuest();
 
@@ -44,17 +47,28 @@ export function FeedbackForm({
     formState: { errors },
   } = useForm<FeedbackFormValues>({
     resolver: zodResolver(feedbackSchema),
-    defaultValues: { raw_text: "", property_id: "" },
+    defaultValues: { raw_text: "", property_id: "", confirmation_code: "" },
   });
 
-  const isSubmitting = submitMutation.isPending || uploadMutation.isPending;
+  const isSubmitting = submitMutation.isPending || uploadMutation.isPending || lookupMutation.isPending;
 
   const onSubmit = async (values: FeedbackFormValues) => {
     try {
+      // Optional, guest-only: a booking is the only way a guest can tie
+      // general feedback to a property (enforced server-side too) - left
+      // blank, this behaves exactly like before (no property reference
+      // at all).
+      let bookingId: number | undefined;
+      if (isGuest && values.confirmation_code?.trim()) {
+        const booking = await lookupMutation.mutateAsync(values.confirmation_code);
+        bookingId = booking.id;
+      }
+
       const feedback = await submitMutation.mutateAsync({
         raw_text: values.raw_text,
         source: "Website",
         property_id: values.property_id ? Number(values.property_id) : undefined,
+        booking_id: bookingId,
         ...detectClientContext(),
       });
 
@@ -84,17 +98,20 @@ export function FeedbackForm({
 
       {isGuest ? (
         // A guest can only ever reference a property through a real
-        // booking (enforced server-side too) - point them at the
-        // booking-lookup flow instead of offering a free listing picker
-        // here, which would let them tag a property they never actually
-        // stayed at.
-        <p className="text-sm text-muted-foreground">
-          Want to report something about a specific stay?{" "}
-          <Link href="/app/checkout-feedback/new" className="text-primary hover:underline">
-            Look up your booking
-          </Link>{" "}
-          instead.
-        </p>
+        // booking (enforced server-side too), so this takes a
+        // confirmation code instead of a free listing picker - optional,
+        // resolved to a real booking at submit time, and left blank
+        // behaves exactly as if the field didn't exist. Rating a
+        // completed stay still goes through the dedicated Checkout
+        // Feedback flow, not here.
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="confirmation_code">Booking confirmation code (optional)</Label>
+          <Input
+            id="confirmation_code"
+            placeholder="e.g. ABC12345"
+            {...register("confirmation_code")}
+          />
+        </div>
       ) : (
         <div className="flex flex-col gap-2">
           <Label htmlFor="property_id">Which listing is this about? (optional)</Label>
